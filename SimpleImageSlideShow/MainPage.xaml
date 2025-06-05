@@ -2,5 +2,56 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              x:Class="SimpleImageSlideShow.MainPage">
-    <Grid x:Name="SlideShowGrid" />
+    <!--
+        Several layout patterns are prepared ahead of time.
+        Show or hide each grid from code behind to switch patterns and
+        set the Image.Source values for each slot.
+    -->
+    <Grid x:Name="RootGrid">
+        <!-- Single image pattern -->
+        <Grid x:Name="PatternSingle" IsVisible="False">
+            <Image x:Name="SingleImage" Aspect="AspectFit" />
+        </Grid>
+
+        <!-- Two images side by side -->
+        <Grid x:Name="PatternSideBySide" IsVisible="False" ColumnSpacing="0" RowSpacing="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Image x:Name="SideImage1" Grid.Column="0" Aspect="AspectFit" />
+            <Image x:Name="SideImage2" Grid.Column="1" Aspect="AspectFit" />
+        </Grid>
+
+        <!-- Four images in a 2x2 grid -->
+        <Grid x:Name="PatternGrid2x2" IsVisible="False" ColumnSpacing="0" RowSpacing="0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Image x:Name="GridImage1" Grid.Row="0" Grid.Column="0" Aspect="AspectFit" />
+            <Image x:Name="GridImage2" Grid.Row="0" Grid.Column="1" Aspect="AspectFit" />
+            <Image x:Name="GridImage3" Grid.Row="1" Grid.Column="0" Aspect="AspectFit" />
+            <Image x:Name="GridImage4" Grid.Row="1" Grid.Column="1" Aspect="AspectFit" />
+        </Grid>
+
+        <!-- Tall image on the left and two stacked images on the right -->
+        <Grid x:Name="PatternTallPlusWide" IsVisible="False" ColumnSpacing="0" RowSpacing="0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="2*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Image x:Name="TallImage" Grid.Row="0" Grid.RowSpan="2" Grid.Column="0" Aspect="AspectFit" />
+            <Image x:Name="WideTopImage" Grid.Row="0" Grid.Column="1" Aspect="AspectFit" />
+            <Image x:Name="WideBottomImage" Grid.Row="1" Grid.Column="1" Aspect="AspectFit" />
+        </Grid>
+    </Grid>
 </ContentPage>
