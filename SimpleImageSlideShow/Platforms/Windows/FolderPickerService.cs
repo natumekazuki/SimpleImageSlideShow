@@ -9,6 +9,7 @@ namespace SimpleImageSlideShow.Services
         public async Task<string?> PickFolderAsync()
         {
             var picker = new FolderPicker();
+            picker.FileTypeFilter.Add("*");
 
             // Fix: Access the MainWindow property correctly using the Application.Current instance.
             var hwnd = WindowNative.GetWindowHandle(((App)Application.Current).MainPage);
