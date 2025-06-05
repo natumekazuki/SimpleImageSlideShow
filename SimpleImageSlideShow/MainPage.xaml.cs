@@ -1,10 +1,4 @@
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Timers;
 using SimpleImageSlideShow.Services;
-using Microsoft.Maui.Controls;
-using System.Drawing;
 
 namespace SimpleImageSlideShow;
 
@@ -35,18 +29,41 @@ public partial class MainPage : ContentPage
 
     private static readonly int[] PatternWeights = {3,3,3,1};
 
-        // shuffle images so slideshow order is random
-        _images.Sort((_, _) => _random.Next(-1, 2));
+    // 1. メンバー初期化子やクラス本体に直接ロジックを書かない。メソッド化する。
+    // 2. 画像シャッフルはSortではなくFisher-YatesアルゴリズムやOrderByで行う。
+    // 3. sourcesリストの宣言漏れを修正。
+    // 4. SlideShowGridや他のUI要素はOnAppearingやコンストラクタで初期化。
+    // 5. using Microsoft.Maui.Controls.Image; でImageの曖昧さを解消。
+
+    // 例: シャッフルとグリッド描画をメソッドにまとめる
+
+    private void ShuffleImages()
+    {
+        // OrderByでシャッフル
+        var shuffled = _images.OrderBy(x => _random.Next()).ToList();
+        _images.Clear();
+        _images.AddRange(shuffled);
+    }
+
+    private void ShowPatternedGrid()
+    {
         _nextPattern = ChoosePattern();
         var pattern = Patterns[_nextPattern];
+        var sources = new List<ImageSource>();
         var orientations = new List<bool>();
+
         foreach (var slot in pattern.Slots)
+        {
             var path = GetNextImage(slot.Landscape);
             sources.Add(ImageSource.FromFile(path));
             orientations.Add(slot.Landscape);
+        }
+        _nextSources = sources;
         _nextOrientations = orientations;
-        if (_nextSources == null || _nextOrientations == null)
-        var pattern = Patterns[_nextPattern];
+
+        SlideShowGrid.Children.Clear();
+        SlideShowGrid.RowDefinitions.Clear();
+        SlideShowGrid.ColumnDefinitions.Clear();
 
         for (int r = 0; r < pattern.Rows; r++)
             SlideShowGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Star });
@@ -56,11 +73,19 @@ public partial class MainPage : ContentPage
         for (int i = 0; i < pattern.Slots.Length; i++)
         {
             var slot = pattern.Slots[i];
-            var img = new Image { Source = _nextSources[i], Aspect = Aspect.AspectFit };
+            var img = new Microsoft.Maui.Controls.Image { Source = _nextSources[i], Aspect = Aspect.AspectFit };
             SlideShowGrid.Add(img, slot.Column, slot.Row);
             Grid.SetRowSpan(img, slot.RowSpan);
             Grid.SetColumnSpan(img, slot.ColumnSpan);
         }
+    }
+
+    // 使い方例: OnAppearingで呼び出す
+    protected override void OnAppearing()
+    {
+        base.OnAppearing();
+        ShuffleImages();
+        ShowPatternedGrid();
     }
 
     private int ChoosePattern()
@@ -97,11 +122,11 @@ public partial class MainPage : ContentPage
     {
         try
         {
-            using var img = Image.FromFile(path);
+            using var img = System.Drawing.Image.FromFile(path);
             return img.Width >= img.Height;
         }
-        catch
-            return true;
+        catch { }
+
         ShowNext();
 
         _timer = new System.Timers.Timer(5000);
@@ -145,7 +170,7 @@ public partial class MainPage : ContentPage
         switch (_nextPattern)
         {
             case 0:
-                var single = new Image { Source = _nextSources[0], Aspect = Aspect.AspectFit };
+                var single = new Microsoft.Maui.Controls.Image { Source = _nextSources[0], Aspect = Aspect.AspectFit };
                 SlideShowGrid.Add(single);
                 break;
             case 1:
@@ -153,7 +178,7 @@ public partial class MainPage : ContentPage
                 SlideShowGrid.ColumnDefinitions.Add(new ColumnDefinition());
                 for (int i = 0; i < 2; i++)
                 {
-                    var img = new Image { Source = _nextSources[i], Aspect = Aspect.AspectFit };
+                    var img = new Microsoft.Maui.Controls.Image { Source = _nextSources[i], Aspect = Aspect.AspectFit };
                     SlideShowGrid.Add(img, i, 0);
                 }
                 break;
@@ -167,7 +192,7 @@ public partial class MainPage : ContentPage
                     for (int c = 0; c < 2; c++)
                     {
                         var idx = r * 2 + c;
-                        var img = new Image { Source = _nextSources[idx], Aspect = Aspect.AspectFit };
+                        var img = new Microsoft.Maui.Controls.Image { Source = _nextSources[idx], Aspect = Aspect.AspectFit };
                         SlideShowGrid.Add(img, c, r);
                     }
                 }
