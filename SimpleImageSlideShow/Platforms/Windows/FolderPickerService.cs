@@ -1,9 +1,6 @@
 #if WINDOWS
-using System;
-using System.Threading.Tasks;
 using Windows.Storage.Pickers;
 using WinRT.Interop;
-using SimpleImageSlideShow.Services;
 
 namespace SimpleImageSlideShow.Services
 {
@@ -12,8 +9,11 @@ namespace SimpleImageSlideShow.Services
         public async Task<string?> PickFolderAsync()
         {
             var picker = new FolderPicker();
-            var hwnd = WindowNative.GetWindowHandle(Microsoft.Maui.MauiWinUIApplication.Current.MainWindow);
+
+            // Fix: Access the MainWindow property correctly using the Application.Current instance.
+            var hwnd = WindowNative.GetWindowHandle(((App)Application.Current).MainPage);
             InitializeWithWindow.Initialize(picker, hwnd);
+
             var folder = await picker.PickSingleFolderAsync();
             return folder?.Path;
         }

@@ -15,7 +15,7 @@ public partial class MainPage : ContentPage
     private int _index = 0;
     private int _nextPattern = 0;
     private List<ImageSource>? _nextSources;
-    private Timer? _timer;
+    private System.Timers.Timer? _timer;
     private bool _initialized;
 
     public MainPage(IFolderPicker folderPicker)
@@ -53,7 +53,7 @@ public partial class MainPage : ContentPage
         PrepareNext();
         ShowNext();
 
-        _timer = new Timer(5000);
+        _timer = new System.Timers.Timer(5000);
         _timer.Elapsed += (s, e) => MainThread.BeginInvokeOnMainThread(() =>
         {
             ShowNext();
