@@ -1,4 +1,6 @@
-﻿namespace SimpleImageSlideShow
+﻿using Microsoft.Extensions.DependencyInjection;
+
+namespace SimpleImageSlideShow
 {
     public partial class App : Application
     {
@@ -6,7 +8,7 @@
         {
             InitializeComponent();
 
-            MainPage = new AppShell();
+            MainPage = MauiProgram.Services.GetService<AppShell>() ?? new AppShell();
         }
     }
 }
