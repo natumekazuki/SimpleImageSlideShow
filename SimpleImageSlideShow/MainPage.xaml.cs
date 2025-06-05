@@ -4,6 +4,7 @@ using System.Linq;
 using System.Timers;
 using SimpleImageSlideShow.Services;
 using Microsoft.Maui.Controls;
+using System.Drawing;
 
 namespace SimpleImageSlideShow;
 
@@ -11,46 +12,96 @@ public partial class MainPage : ContentPage
 {
     private readonly IFolderPicker _folderPicker;
     private readonly List<string> _images = new();
+    private readonly Queue<string> _landscapeQueue = new();
+    private readonly Queue<string> _portraitQueue = new();
     private readonly Random _random = new();
     private int _index = 0;
     private int _nextPattern = 0;
     private List<ImageSource>? _nextSources;
-    private System.Timers.Timer? _timer;
-    private bool _initialized;
+    private List<bool>? _nextOrientations;
+    private record Slot(int Row, int Column, int RowSpan, int ColumnSpan, bool Landscape);
+    private record Pattern(int Rows, int Columns, Slot[] Slots);
 
-    public MainPage(IFolderPicker folderPicker)
+    private static readonly Pattern[] Patterns = new[]
     {
-        InitializeComponent();
-        _folderPicker = folderPicker;
+        new Pattern(1,1,new[]{ new Slot(0,0,1,1,true)}),
+        new Pattern(1,2,new[]{ new Slot(0,0,1,1,true), new Slot(0,1,1,1,true)}),
+        new Pattern(2,2,new[]{
+            new Slot(0,0,1,1,true), new Slot(0,1,1,1,true),
+            new Slot(1,0,1,1,true), new Slot(1,1,1,1,true)}),
+        new Pattern(2,2,new[]{
+            new Slot(0,0,2,1,false), new Slot(0,1,1,1,true), new Slot(1,1,1,1,true)})
+    };
+
+    private static readonly int[] PatternWeights = {3,3,3,1};
+
+        // shuffle images so slideshow order is random
+        _images.Sort((_, _) => _random.Next(-1, 2));
+        _nextPattern = ChoosePattern();
+        var pattern = Patterns[_nextPattern];
+        var orientations = new List<bool>();
+        foreach (var slot in pattern.Slots)
+            var path = GetNextImage(slot.Landscape);
+            sources.Add(ImageSource.FromFile(path));
+            orientations.Add(slot.Landscape);
+        _nextOrientations = orientations;
+        if (_nextSources == null || _nextOrientations == null)
+        var pattern = Patterns[_nextPattern];
+
+        for (int r = 0; r < pattern.Rows; r++)
+            SlideShowGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Star });
+        for (int c = 0; c < pattern.Columns; c++)
+            SlideShowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Star });
+
+        for (int i = 0; i < pattern.Slots.Length; i++)
+        {
+            var slot = pattern.Slots[i];
+            var img = new Image { Source = _nextSources[i], Aspect = Aspect.AspectFit };
+            SlideShowGrid.Add(img, slot.Column, slot.Row);
+            Grid.SetRowSpan(img, slot.RowSpan);
+            Grid.SetColumnSpan(img, slot.ColumnSpan);
+        }
     }
 
-    public MainPage() : this((IFolderPicker)MauiProgram.Services.GetService(typeof(IFolderPicker))!)
+    private int ChoosePattern()
     {
+        int total = PatternWeights.Sum();
+        int r = _random.Next(total);
+        int sum = 0;
+        for (int i = 0; i < PatternWeights.Length; i++)
+        {
+            sum += PatternWeights[i];
+            if (r < sum) return i;
+        }
+        return PatternWeights.Length - 1;
     }
 
-    protected override async void OnAppearing()
+    private string GetNextImage(bool landscape)
     {
-        base.OnAppearing();
-        if (_initialized) return;
-        _initialized = true;
+        var desiredQueue = landscape ? _landscapeQueue : _portraitQueue;
 
-        var folder = await _folderPicker.PickFolderAsync();
-        if (string.IsNullOrEmpty(folder))
+        while (desiredQueue.Count == 0)
         {
-            await DisplayAlert("Folder", "Folder not selected", "OK");
-            return;
+            if (_index >= _images.Count) _index = 0;
+            var file = _images[_index++];
+            bool isLand = IsLandscape(file);
+            (isLand ? _landscapeQueue : _portraitQueue).Enqueue(file);
         }
 
-        _images.AddRange(Directory.GetFiles(folder, "*.*", SearchOption.AllDirectories)
-            .Where(IsImageFile));
+        var path = desiredQueue.Dequeue();
+        desiredQueue.Enqueue(path);
+        return path;
+    }
 
-        if (_images.Count == 0)
+    private static bool IsLandscape(string path)
+    {
+        try
         {
-            await DisplayAlert("Images", "No images found", "OK");
-            return;
+            using var img = Image.FromFile(path);
+            return img.Width >= img.Height;
         }
-
-        PrepareNext();
+        catch
+            return true;
         ShowNext();
 
         _timer = new System.Timers.Timer(5000);
