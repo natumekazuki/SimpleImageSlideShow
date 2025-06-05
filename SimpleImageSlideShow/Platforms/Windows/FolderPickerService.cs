@@ -2,6 +2,7 @@
 using Windows.Storage.Pickers;
 using WinRT.Interop;
 using Microsoft.UI.Xaml;
+using Windows.UI.WebUI;
 
 namespace SimpleImageSlideShow.Services
 {
@@ -9,15 +10,12 @@ namespace SimpleImageSlideShow.Services
     {
         public async Task<string?> PickFolderAsync()
         {
-            var picker = new FolderPicker();
+            var picker = new FolderPicker { SuggestedStartLocation = PickerLocationId.Desktop };
             picker.FileTypeFilter.Add("*");
             // Access the WinUI window from the current application instance
-            var window = ((Microsoft.Maui.MauiWinUIApplication)Microsoft.UI.Xaml.Application.Current).MainWindow;
-            var hwnd = WindowNative.GetWindowHandle(window);
-            // Fix: Access the MainWindow property correctly using the Application.Current instance.
-            var hwnd = WindowNative.GetWindowHandle(((App)Application.Current).MainPage);
-            InitializeWithWindow.Initialize(picker, hwnd);
-
+            var window = Microsoft.Maui.Controls.Application.Current.Windows[0].Handler.PlatformView as Microsoft.UI.Xaml.Window;
+            nint hwnd = WindowNative.GetWindowHandle(window);
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
             var folder = await picker.PickSingleFolderAsync();
             return folder?.Path;
         }
