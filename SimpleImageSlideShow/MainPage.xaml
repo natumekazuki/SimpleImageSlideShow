@@ -8,6 +8,7 @@
         set the Image.Source values for each slot.
     -->
     <Grid x:Name="RootGrid">
+        
         <!-- Single image pattern -->
         <Grid x:Name="PatternSingle" IsVisible="False">
             <Image x:Name="SingleImage" Aspect="AspectFit" />

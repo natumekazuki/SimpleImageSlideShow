@@ -8,7 +8,7 @@ namespace SimpleImageSlideShow
         {
             InitializeComponent();
 
-            MainPage = MauiProgram.Services.GetService<AppShell>() ?? new AppShell();
+            MainPage = MauiProgram.Services.GetService<MainPage>() ?? new MainPage();
         }
     }
 }
