@@ -1,13 +1,14 @@
 ﻿namespace SimpleImageSlideShow.Models
 {
-    internal sealed class ImageEntity
+    internal sealed class ImageEntity : IImageEntity
     {
-        public string FilePath { get; init; } = string.Empty;
+        public required string FilePath { get; init; }
 
-        public double Width { get; init; } = 0.0;
+        public required byte[] BytesImage { get; init; }
 
-        public double Height { get; init; } = 0.0;
+        public required double Width { get; init; }
 
-        public double AspectRatio => Width > 0 ? Height / Width : 0.0;
+        public required double Height { get; init; }
+
     }
 }

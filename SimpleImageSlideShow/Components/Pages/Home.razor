@@ -1,1 +1,15 @@
 ﻿@page "/"
+
+@foreach (var image in this.ImageEntities.Take(1))
+{
+    <div class="slide-container">
+        <img src="@image.ImageUrl"
+             class="sliding-image"
+             style="
+                    max-width:@image.MinWidth;
+                    max-height:@image.MinHeight;
+                    animation-delay:@delaySeconds
+                    " />
+    </div>
+}
+

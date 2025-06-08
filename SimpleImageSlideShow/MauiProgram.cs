@@ -1,4 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
+using SimpleImageSlideShow.Platforms.Windows;
+using SimpleImageSlideShow.Services;
 
 namespace SimpleImageSlideShow
 {
@@ -19,6 +21,10 @@ namespace SimpleImageSlideShow
 #if DEBUG
     		builder.Services.AddBlazorWebViewDeveloperTools();
     		builder.Logging.AddDebug();
+#endif
+
+#if WINDOWS
+            builder.Services.AddSingleton<IImageService, ImageService>();
 #endif
 
             return builder.Build();
