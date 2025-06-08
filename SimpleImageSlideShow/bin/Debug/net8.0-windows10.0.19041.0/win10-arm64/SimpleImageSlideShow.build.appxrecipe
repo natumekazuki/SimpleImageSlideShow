@@ -509,13 +509,10 @@
       <PackagePath>wwwroot\SimpleImageSlideShow.styles.css</PackagePath>
     </AppxPackagedFile>
     <AppxPackagedFile Include="C:\Source\dotnet\MAUI\SimpleImageSlideShow\SimpleImageSlideShow\obj\Debug\net8.0-windows10.0.19041.0\win10-arm64\scopedcss\projectbundle\SimpleImageSlideShow.bundle.scp.css">
-      <PackagePath>wwwroot\SimpleImageSlideShow.03t4j901b0.bundle.scp.css</PackagePath>
+      <PackagePath>wwwroot\SimpleImageSlideShow.u5ly3z071y.bundle.scp.css</PackagePath>
     </AppxPackagedFile>
     <AppxPackagedFile Include="C:\Source\dotnet\MAUI\SimpleImageSlideShow\SimpleImageSlideShow\Components\Layout\MainLayout.razor.css">
       <PackagePath>Components\Layout\MainLayout.razor.css</PackagePath>
-    </AppxPackagedFile>
-    <AppxPackagedFile Include="C:\Source\dotnet\MAUI\SimpleImageSlideShow\SimpleImageSlideShow\Components\Layout\NavMenu.razor.css">
-      <PackagePath>Components\Layout\NavMenu.razor.css</PackagePath>
     </AppxPackagedFile>
   </ItemGroup>
   <ItemGroup>
