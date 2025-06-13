@@ -7,3 +7,5 @@
 /.vs
 /SimpleImageSlideShow/bin
 /._.gitignore
+*.bkp
+*.drawio

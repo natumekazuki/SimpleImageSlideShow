@@ -1,5 +1,16 @@
 ﻿html, body {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    background-color: lavender;
+    margin: 0;
+    padding: 0;
+    height: 100%;
+}
+
+.wrapper {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    margin: 0;
 }
 
 a, .btn-link {
@@ -85,26 +96,111 @@ h1:focus {
     }
 }
 
-.slide-container {
-    position: relative;
-    width: 100%;
-    height: 100%;
+.image-layout-box {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(100vw, calc(100vh * (16 / 9)));
+    aspect-ratio: 16 / 9;
     overflow: hidden;
 }
 
-@keyframes slideLeft {
-    from {
-        transform: translateX(100%);
-    }
-
-    to {
-        transform: translateX(-100%);
-    }
+.image-layout {
+    display: grid;
+    width: 100%;
+    height: 100%;
+    grid-template-columns: repeat(16, 1fr);
+    grid-template-rows: repeat(16, 1fr);
+    gap: 0;
+    position: relative;
 }
 
-.sliding-image {
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    animation: slideLeft 8s linear infinite;
+    .image-layout.debug .cell {
+        position: relative;
+        outline: 1px dashed rgba(0,0,0,0.2);
+    }
+
+        /* 左上に行番号 */
+        .image-layout.debug .cell::before {
+            content: "R" attr(data-row);
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            font-size: 0.75rem;
+            color: rgba(0,0,0,0.5);
+        }
+
+        /* 右上に列番号 */
+        .image-layout.debug .cell::after {
+            content: "C" attr(data-col);
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            font-size: 0.75rem;
+            color: rgba(0,0,0,0.5);
+        }
+
+.item {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+    /* 画像は元の AR を保って枠内に収まる */
+    .item img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+        display: block;
+    }
+
+
+.frame-container {
+    display: inline-block; /* サイズは画像に合わせる */
+    padding: 8px; /* フレームの厚み調整 */
+    background-clip: padding-box;
+    margin: 16px; /* 好きな間隔を調整 */
+}
+
+    .frame-container img {
+        display: block;
+        max-width: 100%;
+        height: auto;
+    }
+
+/* ──────────────────────────────────── */
+/* 1) クラシック・ウッド調（影＋ベベル） */
+/* ──────────────────────────────────── */
+.frame-classic {
+    background: #c49b63; /* 木目カラーを模したベース */
+    box-shadow: inset 0 2px 2px rgba(255,255,255,0.6), inset 0 -2px 2px rgba(0,0,0,0.2), 0 4px 6px rgba(0,0,0,0.3);
+    border: 4px solid #8c6b3a;
+}
+
+/* ──────────────────────────────────── */
+/* 2) シンプル・ナチュラル（細めの単色ボーダー） */
+/* ──────────────────────────────────── */
+.frame-simple {
+    border: 3px solid #444;
+    background: #fff;
+}
+
+/* ──────────────────────────────────── */
+/* 3) ドロップシャドウ（フレーム感＋浮き上がり） */
+/* ──────────────────────────────────── */
+.frame-drop {
+    background: #fafafa;
+    border: 1px solid #ddd;
+    box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+}
+
+/* ──────────────────────────────────── */
+/* 4) オーナート（装飾縁取り＋グラデーション） */
+/* ──────────────────────────────────── */
+.frame-ornate {
+    padding: 12px;
+    background: linear-gradient(135deg, #eee 25%, #ddd 25%, #ddd 50%, #eee 50%, #eee 75%, #ddd 75%, #ddd 100%);
+    background-size: 16px 16px;
+    border: 6px groove #bbb;
 }

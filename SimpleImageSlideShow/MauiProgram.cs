@@ -18,8 +18,10 @@ namespace SimpleImageSlideShow
 
             builder.Services.AddMauiBlazorWebView();
 
+            builder.Services.AddSingleton<FrameService>();
+
 #if DEBUG
-    		builder.Services.AddBlazorWebViewDeveloperTools();
+            builder.Services.AddBlazorWebViewDeveloperTools();
     		builder.Logging.AddDebug();
 #endif
 
