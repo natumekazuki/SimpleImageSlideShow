@@ -34,7 +34,7 @@ namespace SimpleImageSlideShow.WinUI
 
                     if (window.Presenter is OverlappedPresenter presenter)
                     {
-                        presenter.IsMinimizable = false;
+                        //presenter.IsMinimizable = false;
                         presenter.IsMaximizable = false;
                     }
                 }
