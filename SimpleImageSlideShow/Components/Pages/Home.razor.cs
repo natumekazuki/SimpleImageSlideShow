@@ -10,11 +10,16 @@ namespace SimpleImageSlideShow.Components.Pages
         [Inject]
         public required IImageService ImageService { get; init; }
 
-        private List<IImageEntity> ImageEntities { get; set; } = [];
+        private List<IImageEntity> ImageEntities_1 { get; set; } = [];
+        private List<IImageEntity> ImageEntities_2 { get; set; } = [];
 
         private uint DelaySeconds { get; set; } = DefaultDelaySeconds;
 
-        private const uint DefaultDelaySeconds = 5;
+        private readonly uint A = DefaultDelaySeconds * 2;
+
+        private const uint DefaultDelaySeconds = 2;
+
+        private int Count = 0;
 
         private static async Task<string> SelectDirectoryAsync()
         {
@@ -34,7 +39,7 @@ namespace SimpleImageSlideShow.Components.Pages
         {
             this.Timer.Stop();
 
-            this.ImageEntities.Clear();
+            this.ImageEntities_1.Clear();
             await this.ReloadImageAsync();
 
             this.Timer = new(TimeSpan.FromSeconds(DelaySeconds));
@@ -43,7 +48,6 @@ namespace SimpleImageSlideShow.Components.Pages
             {
                 await InvokeAsync(async () =>
                 {
-                    this.RemoveFirstImage();
                     await this.ReloadImageAsync();
                     this.StateHasChanged();
                 });
@@ -59,22 +63,44 @@ namespace SimpleImageSlideShow.Components.Pages
             ImageService.LoadImages(directoryPath);
         }
 
+        private bool useFirstList = true;
+
         private async Task ReloadImageAsync()
         {
             var imagePath = ImageService.GetRandomImagePath();
             var imageEntity = await ImageService.LoadImageEntityAsync(imagePath);
             if (imageEntity is null) return;
-            this.ImageEntities.Add(imageEntity);
-        }
+            Count++;
 
-        private void RemoveFirstImage()
-        {
-            if(this.ImageEntities.Count > 5)
+            if (useFirstList)
             {
-                this.ImageEntities.RemoveAt(0);
+                ImageEntities_1.Add(imageEntity);
+
+                if (ImageEntities_1.Count == 9)
+                {
+                    // 次でImageEntities_1に戻る直前にImageEntities_1をクリア
+                    ImageEntities_2.Clear();
+                }
+
+                if (ImageEntities_1.Count % 10 == 0)
+                {
+                    useFirstList = false;
+                }
+            }
+            else
+            {
+                ImageEntities_2.Add(imageEntity);
+                if (ImageEntities_2.Count == 9)
+                {
+                    // 次でImageEntities_1に戻る直前にImageEntities_1をクリア
+                    ImageEntities_1.Clear();
+                }
+                if (ImageEntities_2.Count % 10 == 0)
+                {
+                    useFirstList = true;
+                }
             }
         }
-
         protected override async Task OnInitializedAsync()
         {
             await base.OnInitializedAsync();
@@ -87,7 +113,6 @@ namespace SimpleImageSlideShow.Components.Pages
             {
                 await InvokeAsync(async () =>
                 {
-                    this.RemoveFirstImage();
                     await this.ReloadImageAsync();
                     this.StateHasChanged();
                 });

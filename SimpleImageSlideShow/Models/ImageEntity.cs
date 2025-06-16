@@ -1,9 +1,8 @@
-﻿using SimpleImageSlideShow.Services;
-
-namespace SimpleImageSlideShow.Models
+﻿namespace SimpleImageSlideShow.Models
 {
     internal sealed class ImageEntity : IImageEntity
     {
+        public string Id = Guid.NewGuid().ToString();
         public required string FilePath { get; init; }
 
         public required byte[] BytesImage { get; init; }

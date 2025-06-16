@@ -96,51 +96,6 @@ h1:focus {
     }
 }
 
-.image-layout-box {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: min(100vw, calc(100vh * (16 / 9)));
-    aspect-ratio: 16 / 9;
-    overflow: hidden;
-}
-
-.image-layout {
-    display: grid;
-    width: 100%;
-    height: 100%;
-    grid-template-columns: repeat(16, 1fr);
-    grid-template-rows: repeat(16, 1fr);
-    gap: 0;
-    position: relative;
-}
-
-    .image-layout.debug .cell {
-        position: relative;
-        outline: 1px dashed rgba(0,0,0,0.2);
-    }
-
-        /* 左上に行番号 */
-        .image-layout.debug .cell::before {
-            content: "R" attr(data-row);
-            position: absolute;
-            top: 2px;
-            left: 2px;
-            font-size: 0.75rem;
-            color: rgba(0,0,0,0.5);
-        }
-
-        /* 右上に列番号 */
-        .image-layout.debug .cell::after {
-            content: "C" attr(data-col);
-            position: absolute;
-            top: 2px;
-            right: 2px;
-            font-size: 0.75rem;
-            color: rgba(0,0,0,0.5);
-        }
-
 .item {
     display: flex;
     justify-content: center;
@@ -203,4 +158,34 @@ h1:focus {
     background: linear-gradient(135deg, #eee 25%, #ddd 25%, #ddd 50%, #eee 50%, #eee 75%, #ddd 75%, #ddd 100%);
     background-size: 16px 16px;
     border: 6px groove #bbb;
+}
+
+.slideshow-container {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+}
+
+.slide {
+    position: absolute;
+    top: 50%;
+    animation-name: slide-left;
+    animation-timing-function: linear;
+    animation-fill-mode: forwards;
+}
+
+    .slide img {
+        width: 50vw;
+        height: auto;
+    }
+
+@keyframes slide-left {
+    from {
+        transform: translate(100vw, -50%);
+    }
+
+    to {
+        transform: translate(-110%, -50%);
+    }
 }

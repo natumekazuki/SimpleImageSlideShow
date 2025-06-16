@@ -1,9 +1,36 @@
 ﻿@page "/"
 
-@if (this.ImageEntities.Count > 0)
-{
-    @foreach (var imageEntity in this.ImageEntities)
+@Count
+
+<br/>
+
+@this.ImageEntities_1.Count
+
+<br />
+
+@this.ImageEntities_2.Count
+
+<br />
+
+<div class="slideshow-container">
+
+    @if (this.ImageEntities_1.Count > 0)
     {
-        <img src="@imageEntity.ImageUrl" alt="Image" class="img-fluid" />
+        @foreach (var imageEntity in this.ImageEntities_1)
+        {
+            <div class="slide @imageEntity.CssClass" style="animation-duration:@($"{A}s")">
+                <img src="@imageEntity.ImageUrl" alt="Image" class="img-fluid" />
+            </div>
+        }
     }
-}
+
+    @if (this.ImageEntities_2.Count > 0)
+    {
+        @foreach (var imageEntity in this.ImageEntities_2)
+        {
+            <div class="slide @imageEntity.CssClass" style="animation-duration:@($"{A}s")">
+                <img src="@imageEntity.ImageUrl" alt="Image" class="img-fluid" />
+            </div>
+        }
+    }
+</div>
