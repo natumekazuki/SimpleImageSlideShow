@@ -204,3 +204,31 @@ h1:focus {
     background-size: 16px 16px;
     border: 6px groove #bbb;
 }
+
+/* ------------------------------------- */
+/* Slideshow */
+/* ------------------------------------- */
+.slideshow-container {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+}
+
+.slide {
+    position: absolute;
+    top: 50%;
+    animation-name: slide-left;
+    animation-timing-function: linear;
+    animation-fill-mode: forwards;
+}
+
+@keyframes slide-left {
+    from {
+        transform: translate(100vw, -50%);
+    }
+    to {
+        transform: translate(-100%, -50%);
+    }
+}
+
