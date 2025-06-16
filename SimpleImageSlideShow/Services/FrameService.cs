@@ -1,4 +1,4 @@
-﻿using SimpleImageSlideShow.Models.ImageLayout;
+﻿using SimpleImageSlideShow.Models;
 
 namespace SimpleImageSlideShow.Services
 {

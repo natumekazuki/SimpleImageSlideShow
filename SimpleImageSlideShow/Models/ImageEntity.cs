@@ -1,4 +1,6 @@
-﻿namespace SimpleImageSlideShow.Models
+﻿using SimpleImageSlideShow.Services;
+
+namespace SimpleImageSlideShow.Models
 {
     internal sealed class ImageEntity : IImageEntity
     {
@@ -10,5 +12,6 @@
 
         public required double Height { get; init; }
 
+        public required string CssClass { get; init; }
     }
 }

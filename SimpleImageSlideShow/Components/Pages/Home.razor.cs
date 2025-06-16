@@ -1,8 +1,5 @@
 ﻿using Microsoft.AspNetCore.Components;
-using Microsoft.JSInterop;
-using SimpleImageSlideShow.Components.Pages.ImageLayoutViews;
 using SimpleImageSlideShow.Models;
-using SimpleImageSlideShow.Models.ImageLayout;
 using SimpleImageSlideShow.Services;
 using Windows.Storage.Pickers;
 
@@ -10,26 +7,14 @@ namespace SimpleImageSlideShow.Components.Pages
 {
     public sealed partial class Home
     {
-
-        private const int Columns = 16;
-        private const int TotalCells = Columns * Columns;
-
         [Inject]
         public required IImageService ImageService { get; init; }
 
-        [Inject]
-        public required IJSRuntime JS { get; init; }
-
         private List<IImageEntity> ImageEntities { get; set; } = [];
 
+        private uint DelaySeconds { get; set; } = DefaultDelaySeconds;
 
-        private List<IImageEntity> NextImageEntities { get; set; } = [];
-
-        private const uint delaySeconds = 5;
-
-        private ImageLayoutEntity? ImageLayout { get; set; } = default;
-
-        private readonly Random random = new();
+        private const uint DefaultDelaySeconds = 5;
 
         private static async Task<string> SelectDirectoryAsync()
         {
@@ -43,7 +28,28 @@ namespace SimpleImageSlideShow.Components.Pages
             return folderPicked is not null ? folderPicked.Path : string.Empty;
         }
 
-        private static readonly System.Timers.Timer timer = new(TimeSpan.FromSeconds(delaySeconds));
+        private System.Timers.Timer Timer = new(TimeSpan.FromSeconds(DefaultDelaySeconds));
+
+        private async Task UpdateTimerAsync()
+        {
+            this.Timer.Stop();
+
+            this.ImageEntities.Clear();
+            await this.ReloadImageAsync();
+
+            this.Timer = new(TimeSpan.FromSeconds(DelaySeconds));
+            Timer.AutoReset = true;
+            Timer.Elapsed += async (_, __) =>
+            {
+                await InvokeAsync(async () =>
+                {
+                    this.RemoveFirstImage();
+                    await this.ReloadImageAsync();
+                    this.StateHasChanged();
+                });
+            };
+            Timer.Start();
+        }
 
         private async Task LoadImagesAsync()
         {
@@ -61,42 +67,12 @@ namespace SimpleImageSlideShow.Components.Pages
             this.ImageEntities.Add(imageEntity);
         }
 
-        private async Task ReloadImageLayoutAsync()
+        private void RemoveFirstImage()
         {
-            foreach (var imageEntity in this.NextImageEntities)
+            if(this.ImageEntities.Count > 5)
             {
-                this.ImageEntities.Remove(imageEntity);
+                this.ImageEntities.RemoveAt(0);
             }
-
-            NextImageEntities.Clear();
-
-            var imageLayoutEntity = this.GetRandomImageLayoutEntity();
-
-            int widthImageCount = (int)imageLayoutEntity.WideImageCount;
-            int tallImageCount = (int)imageLayoutEntity.TallImageCount;
-
-            int tryCount = 0;
-
-            while ((int)imageLayoutEntity.WideImageCount > this.ImageEntities.Count(i => i.IsLandscape)
-                   || (int)imageLayoutEntity.TallImageCount > this.ImageEntities.Count(i => !i.IsLandscape))
-            {
-                if(tryCount > 100)
-                {
-                    imageLayoutEntity = this.GetRandomImageLayoutEntity();
-                    tryCount = 0;
-                }
-
-                await this.ReloadImageAsync();
-                tryCount++;
-            }
-
-            var widthImages = this.ImageEntities.Where(i => i.IsLandscape).Take(widthImageCount).ToList();
-            var tallImages = this.ImageEntities.Where(i => !i.IsLandscape).Take(tallImageCount).ToList();
-
-            NextImageEntities.AddRange(widthImages);
-            NextImageEntities.AddRange(tallImages);
-
-            this.ImageLayout = imageLayoutEntity;
         }
 
         protected override async Task OnInitializedAsync()
@@ -104,24 +80,19 @@ namespace SimpleImageSlideShow.Components.Pages
             await base.OnInitializedAsync();
 
             await this.LoadImagesAsync();
-            await ReloadImageLayoutAsync();
+            await this.ReloadImageAsync();
 
-            timer.AutoReset = true;
-            timer.Elapsed += async (_, __) =>
+            Timer.AutoReset = true;
+            Timer.Elapsed += async (_, __) =>
             {
                 await InvokeAsync(async () =>
                 {
-                    await ReloadImageLayoutAsync();
+                    this.RemoveFirstImage();
+                    await this.ReloadImageAsync();
                     this.StateHasChanged();
                 });
             };
-            timer.Start();
-        }
-
-        private ImageLayoutEntity GetRandomImageLayoutEntity()
-        {
-            int index = random.Next(ImageLayouts.ImageLayoutEntities.Count);
-            return ImageLayouts.ImageLayoutEntities[index];
+            Timer.Start();
         }
     }
 }

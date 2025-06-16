@@ -32,11 +32,12 @@ namespace SimpleImageSlideShow.WinUI
                     const int height = 1080;
                     window.MoveAndResize(new RectInt32((display.WorkArea.Width - width) / 2, (display.WorkArea.Height - height) / 2, width, height));
 
-                    if (window.Presenter is OverlappedPresenter presenter)
-                    {
-                        //presenter.IsMinimizable = false;
-                        presenter.IsMaximizable = false;
-                    }
+                    //if (window.Presenter is OverlappedPresenter presenter)
+                    //{
+                    //    presenter.IsResizable = false;
+                    //    presenter.IsMaximizable = false;
+                    //    presenter.IsMinimizable = false;
+                    //}
                 }
             });
         }

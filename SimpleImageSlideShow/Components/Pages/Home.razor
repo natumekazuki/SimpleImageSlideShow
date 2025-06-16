@@ -1,29 +1,9 @@
 ﻿@page "/"
 
-@if (this.ImageLayout is not null)
+@if (this.ImageEntities.Count > 0)
 {
-    <div class="image-layout-box">
-        <div class="image-layout">
-
-            @for (int i = 1; i <= TotalCells; i++)
-            {
-                var row = (i - 1) / Columns + 1;
-                var col = (i - 1) % Columns + 1;
-                <div class="cell" data-row="@row" data-col="@col"></div>
-            }
-
-            @switch (this.ImageLayout.Id)
-            {
-                case SimpleImageSlideShow.Components.Pages.ImageLayoutViews.ImageLayout1.LayoutId:
-                    <SimpleImageSlideShow.Components.Pages.ImageLayoutViews.ImageLayout1 ImageEntities="this.NextImageEntities" />
-                    break;
-
-                case SimpleImageSlideShow.Components.Pages.ImageLayoutViews.ImageLayout2.LayoutId:
-                    <SimpleImageSlideShow.Components.Pages.ImageLayoutViews.ImageLayout2 ImageEntities="this.NextImageEntities" />
-                    break;
-            }
-
-        </div>
-    
-    </div>
+    @foreach (var imageEntity in this.ImageEntities)
+    {
+        <img src="@imageEntity.ImageUrl" alt="Image" class="img-fluid" />
+    }
 }
