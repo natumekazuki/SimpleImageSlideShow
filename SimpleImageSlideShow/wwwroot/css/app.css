@@ -223,6 +223,11 @@ h1:focus {
     animation-fill-mode: forwards;
 }
 
+.slide img {
+    width: 50vw;
+    height: auto;
+}
+
 @keyframes slide-left {
     from {
         transform: translate(100vw, -50%);
