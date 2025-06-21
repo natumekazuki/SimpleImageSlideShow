@@ -17,9 +17,7 @@ namespace SimpleImageSlideShow.Components.Pages
 
         private readonly uint A = DefaultDelaySeconds * 2;
 
-        private const uint DefaultDelaySeconds = 2;
-
-        private int Count = 0;
+        private const uint DefaultDelaySeconds = 10;
 
         private static async Task<string> SelectDirectoryAsync()
         {
@@ -70,7 +68,6 @@ namespace SimpleImageSlideShow.Components.Pages
             var imagePath = ImageService.GetRandomImagePath();
             var imageEntity = await ImageService.LoadImageEntityAsync(imagePath);
             if (imageEntity is null) return;
-            Count++;
 
             if (useFirstList)
             {
