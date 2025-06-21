@@ -1,4 +1,4 @@
-﻿namespace SimpleImageSlideShow.Models.ImageLayout
+﻿namespace SimpleImageSlideShow.Models
 {
     internal static class Frames
     {

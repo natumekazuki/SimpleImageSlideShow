@@ -3,7 +3,7 @@ using SimpleImageSlideShow.Services;
 
 namespace SimpleImageSlideShow.Platforms.Windows
 {
-    internal class ImageService : IImageService
+    internal class ImageService(FrameService frameService) : IImageService
     {
         private static readonly Random Rng = new();
 
@@ -43,7 +43,8 @@ namespace SimpleImageSlideShow.Platforms.Windows
                 FilePath = imagePath,
                 BytesImage = bytes,
                 Width = width,
-                Height = height
+                Height = height,
+                CssClass = frameService.GetFrameCss()
             };
         }
 

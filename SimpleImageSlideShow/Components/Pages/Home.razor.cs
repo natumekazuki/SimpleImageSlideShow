@@ -1,8 +1,5 @@
 ﻿using Microsoft.AspNetCore.Components;
-using Microsoft.JSInterop;
-using SimpleImageSlideShow.Components.Pages.ImageLayoutViews;
 using SimpleImageSlideShow.Models;
-using SimpleImageSlideShow.Models.ImageLayout;
 using SimpleImageSlideShow.Services;
 using Windows.Storage.Pickers;
 
@@ -10,26 +7,17 @@ namespace SimpleImageSlideShow.Components.Pages
 {
     public sealed partial class Home
     {
-
-        private const int Columns = 16;
-        private const int TotalCells = Columns * Columns;
-
         [Inject]
         public required IImageService ImageService { get; init; }
 
-        [Inject]
-        public required IJSRuntime JS { get; init; }
+        private List<IImageEntity> ImageEntities_1 { get; set; } = [];
+        private List<IImageEntity> ImageEntities_2 { get; set; } = [];
 
-        private List<IImageEntity> ImageEntities { get; set; } = [];
+        private uint DelaySeconds { get; set; } = DefaultDelaySeconds;
 
+        private readonly uint A = DefaultDelaySeconds * 2;
 
-        private List<IImageEntity> NextImageEntities { get; set; } = [];
-
-        private const uint delaySeconds = 5;
-
-        private ImageLayoutEntity? ImageLayout { get; set; } = default;
-
-        private readonly Random random = new();
+        private const uint DefaultDelaySeconds = 10;
 
         private static async Task<string> SelectDirectoryAsync()
         {
@@ -43,7 +31,27 @@ namespace SimpleImageSlideShow.Components.Pages
             return folderPicked is not null ? folderPicked.Path : string.Empty;
         }
 
-        private static readonly System.Timers.Timer timer = new(TimeSpan.FromSeconds(delaySeconds));
+        private System.Timers.Timer Timer = new(TimeSpan.FromSeconds(DefaultDelaySeconds));
+
+        private async Task UpdateTimerAsync()
+        {
+            this.Timer.Stop();
+
+            this.ImageEntities_1.Clear();
+            await this.ReloadImageAsync();
+
+            this.Timer = new(TimeSpan.FromSeconds(DelaySeconds));
+            Timer.AutoReset = true;
+            Timer.Elapsed += async (_, __) =>
+            {
+                await InvokeAsync(async () =>
+                {
+                    await this.ReloadImageAsync();
+                    this.StateHasChanged();
+                });
+            };
+            Timer.Start();
+        }
 
         private async Task LoadImagesAsync()
         {
@@ -53,75 +61,60 @@ namespace SimpleImageSlideShow.Components.Pages
             ImageService.LoadImages(directoryPath);
         }
 
+        private bool useFirstList = true;
+
         private async Task ReloadImageAsync()
         {
             var imagePath = ImageService.GetRandomImagePath();
             var imageEntity = await ImageService.LoadImageEntityAsync(imagePath);
             if (imageEntity is null) return;
-            this.ImageEntities.Add(imageEntity);
-        }
 
-        private async Task ReloadImageLayoutAsync()
-        {
-            foreach (var imageEntity in this.NextImageEntities)
+            if (useFirstList)
             {
-                this.ImageEntities.Remove(imageEntity);
-            }
+                ImageEntities_1.Add(imageEntity);
 
-            NextImageEntities.Clear();
-
-            var imageLayoutEntity = this.GetRandomImageLayoutEntity();
-
-            int widthImageCount = (int)imageLayoutEntity.WideImageCount;
-            int tallImageCount = (int)imageLayoutEntity.TallImageCount;
-
-            int tryCount = 0;
-
-            while ((int)imageLayoutEntity.WideImageCount > this.ImageEntities.Count(i => i.IsLandscape)
-                   || (int)imageLayoutEntity.TallImageCount > this.ImageEntities.Count(i => !i.IsLandscape))
-            {
-                if(tryCount > 100)
+                if (ImageEntities_1.Count == 9)
                 {
-                    imageLayoutEntity = this.GetRandomImageLayoutEntity();
-                    tryCount = 0;
+                    // 次でImageEntities_1に戻る直前にImageEntities_1をクリア
+                    ImageEntities_2.Clear();
                 }
 
-                await this.ReloadImageAsync();
-                tryCount++;
+                if (ImageEntities_1.Count % 10 == 0)
+                {
+                    useFirstList = false;
+                }
             }
-
-            var widthImages = this.ImageEntities.Where(i => i.IsLandscape).Take(widthImageCount).ToList();
-            var tallImages = this.ImageEntities.Where(i => !i.IsLandscape).Take(tallImageCount).ToList();
-
-            NextImageEntities.AddRange(widthImages);
-            NextImageEntities.AddRange(tallImages);
-
-            this.ImageLayout = imageLayoutEntity;
+            else
+            {
+                ImageEntities_2.Add(imageEntity);
+                if (ImageEntities_2.Count == 9)
+                {
+                    // 次でImageEntities_1に戻る直前にImageEntities_1をクリア
+                    ImageEntities_1.Clear();
+                }
+                if (ImageEntities_2.Count % 10 == 0)
+                {
+                    useFirstList = true;
+                }
+            }
         }
-
         protected override async Task OnInitializedAsync()
         {
             await base.OnInitializedAsync();
 
             await this.LoadImagesAsync();
-            await ReloadImageLayoutAsync();
+            await this.ReloadImageAsync();
 
-            timer.AutoReset = true;
-            timer.Elapsed += async (_, __) =>
+            Timer.AutoReset = true;
+            Timer.Elapsed += async (_, __) =>
             {
                 await InvokeAsync(async () =>
                 {
-                    await ReloadImageLayoutAsync();
+                    await this.ReloadImageAsync();
                     this.StateHasChanged();
                 });
             };
-            timer.Start();
-        }
-
-        private ImageLayoutEntity GetRandomImageLayoutEntity()
-        {
-            int index = random.Next(ImageLayouts.ImageLayoutEntities.Count);
-            return ImageLayouts.ImageLayoutEntities[index];
+            Timer.Start();
         }
     }
 }
