@@ -189,3 +189,20 @@ h1:focus {
         transform: translate(-110%, -50%);
     }
 }
+.delay-slider-area {
+    position: fixed;
+    bottom: 1rem;
+    right: 1rem;
+}
+
+.delay-slider {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+.delay-slider-area:hover .delay-slider,
+.delay-slider-area:focus-within .delay-slider {
+    opacity: 1;
+    pointer-events: auto;
+}

@@ -1,12 +1,13 @@
 ﻿@page "/"
 
+
 <div class="slideshow-container">
 
     @if (this.ImageEntities_1.Count > 0)
     {
         @foreach (var imageEntity in this.ImageEntities_1)
         {
-            <div class="slide @imageEntity.CssClass" style="animation-duration:@($"{A}s")">
+            <div class="slide @imageEntity.CssClass" style="animation-duration:@($"{AnimationDurationSeconds}s")">
                 <img src="@imageEntity.ImageUrl" alt="Image" class="img-fluid" />
             </div>
         }
@@ -16,9 +17,17 @@
     {
         @foreach (var imageEntity in this.ImageEntities_2)
         {
-            <div class="slide @imageEntity.CssClass" style="animation-duration:@($"{A}s")">
+            <div class="slide @imageEntity.CssClass" style="animation-duration:@($"{AnimationDurationSeconds}s")">
                 <img src="@imageEntity.ImageUrl" alt="Image" class="img-fluid" />
             </div>
         }
     }
 </div>
+
+<div class="delay-slider-area">
+    <div class="delay-slider">
+        <RadzenSlider @bind-Value="DelaySeconds" Min="1" Max="60" Step="1" Style="width:300px" Change="@OnDelaySecondsChange" />
+        <span class="ms-2">@DelaySeconds 秒</span>
+    </div>
+</div>
+

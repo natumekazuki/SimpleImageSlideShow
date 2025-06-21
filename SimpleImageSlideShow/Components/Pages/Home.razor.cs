@@ -15,7 +15,12 @@ namespace SimpleImageSlideShow.Components.Pages
 
         private uint DelaySeconds { get; set; } = DefaultDelaySeconds;
 
-        private readonly uint A = DefaultDelaySeconds * 2;
+        private uint AnimationDurationSeconds => DelaySeconds * 2;
+
+        private async Task OnDelaySecondsChange(object value)
+        {
+            await UpdateTimerAsync();
+        }
 
         private const uint DefaultDelaySeconds = 10;
 
