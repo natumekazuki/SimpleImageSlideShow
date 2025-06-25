@@ -79,7 +79,7 @@ namespace SimpleImageSlideShow.Components.Pages
 
                 if (ImageEntities_1.Count == 9)
                 {
-                    // 次でImageEntities_1に戻る直前にImageEntities_1をクリア
+                    // 次でImageEntities_1に戻る直前にImageEntities_2をクリア
                     ImageEntities_2.Clear();
                 }
 
@@ -93,7 +93,7 @@ namespace SimpleImageSlideShow.Components.Pages
                 ImageEntities_2.Add(imageEntity);
                 if (ImageEntities_2.Count == 9)
                 {
-                    // 次でImageEntities_1に戻る直前にImageEntities_1をクリア
+                    // 次でImageEntities_2に戻る直前にImageEntities_1をクリア
                     ImageEntities_1.Clear();
                 }
                 if (ImageEntities_2.Count % 10 == 0)
