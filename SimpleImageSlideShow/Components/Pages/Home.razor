@@ -6,7 +6,7 @@
     {
         @foreach (var imageEntity in this.ImageEntities_1)
         {
-            <div class="slide @imageEntity.CssClass" style="animation-duration:@($"{A}s")">
+            <div class="slide @imageEntity.CssClass" style="@imageEntity.CssVariables animation-duration:@($"{AnimationDelaySeconds}s")">
                 <img src="@imageEntity.ImageUrl" alt="Image" class="img-fluid" />
             </div>
         }
@@ -16,7 +16,7 @@
     {
         @foreach (var imageEntity in this.ImageEntities_2)
         {
-            <div class="slide @imageEntity.CssClass" style="animation-duration:@($"{A}s")">
+            <div class="slide @imageEntity.CssClass" style="@imageEntity.CssVariables animation-duration:@($"{AnimationDelaySeconds}s")">
                 <img src="@imageEntity.ImageUrl" alt="Image" class="img-fluid" />
             </div>
         }

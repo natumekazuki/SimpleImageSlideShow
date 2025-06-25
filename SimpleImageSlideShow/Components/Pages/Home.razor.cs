@@ -15,9 +15,13 @@ namespace SimpleImageSlideShow.Components.Pages
 
         private uint DelaySeconds { get; set; } = DefaultDelaySeconds;
 
-        private readonly uint A = DefaultDelaySeconds * 2;
+        private uint AnimationDelaySeconds => this.DelaySeconds * this.ImageCount;
 
-        private const uint DefaultDelaySeconds = 10;
+        private uint ImageCount { get; set; } = DefaultImageCount;
+
+        private const uint DefaultImageCount = 4;
+
+        private const uint DefaultDelaySeconds = 5;
 
         private static async Task<string> SelectDirectoryAsync()
         {

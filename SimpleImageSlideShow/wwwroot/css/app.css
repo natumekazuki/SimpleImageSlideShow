@@ -169,14 +169,21 @@ h1:focus {
 
 .slide {
     position: absolute;
-    top: 50%;
+    width: 30vw;
+    height: auto;
     animation-name: slide-left;
     animation-timing-function: linear;
     animation-fill-mode: forwards;
+    animation-duration: 10s;
+    top: calc( 20vh + (
+        (100vh - (30vw * var(--aspect-ratio)) - 20vh)
+      * var(--offset)
+    ) );
 }
 
+
     .slide img {
-        width: 50vw;
+        width: 30vw;
         height: auto;
     }
 

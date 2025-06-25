@@ -30,8 +30,8 @@ namespace SimpleImageSlideShow.WinUI
                     var display = DisplayArea.GetFromWindowId(window.Id, DisplayAreaFallback.Nearest);
                     //const int width = 1920;
                     //const int height = 1080;
-                    const int width = 800;
-                    const int height = 600;
+                    const int width = 1280;
+                    const int height = 720;
                     window.MoveAndResize(new RectInt32((display.WorkArea.Width - width) / 2, (display.WorkArea.Height - height) / 2, width, height));
 
                     //if (window.Presenter is OverlappedPresenter presenter)

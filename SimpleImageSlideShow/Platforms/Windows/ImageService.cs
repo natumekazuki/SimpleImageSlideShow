@@ -7,12 +7,14 @@ namespace SimpleImageSlideShow.Platforms.Windows
     {
         private static readonly Random Rng = new();
 
-
         private List<string> AllImages { get; init; } = [];
 
         private FileSystemWatcher? watcher;
         private readonly object _lock = new();
 
+        private readonly Random rng = new();
+
+        private double RandomOffset() => rng.NextDouble();
 
         string IImageService.GetRandomImagePath()
         {
@@ -44,7 +46,8 @@ namespace SimpleImageSlideShow.Platforms.Windows
                 BytesImage = bytes,
                 Width = width,
                 Height = height,
-                CssClass = frameService.GetFrameCss()
+                CssClass = frameService.GetFrameCss(),
+                Offset = this.RandomOffset()
             };
         }
 
