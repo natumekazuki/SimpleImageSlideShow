@@ -175,8 +175,8 @@ h1:focus {
     animation-timing-function: linear;
     animation-fill-mode: forwards;
     animation-duration: 10s;
-    top: calc( 20vh + (
-        (100vh - (30vw * var(--aspect-ratio)) - 20vh)
+    top: calc( 30vh + (
+        (100vh - (40vw * var(--aspect-ratio)) - 30vh)
       * var(--offset)
     ) );
 }
