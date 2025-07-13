@@ -169,7 +169,7 @@ h1:focus {
 
 .slide {
     position: absolute;
-    width: 30vw;
+    width: 50vw;
     height: auto;
     animation-name: slide-left;
     animation-timing-function: linear;

@@ -19,7 +19,7 @@ namespace SimpleImageSlideShow.Components.Pages
 
         private uint ImageCount { get; set; } = DefaultImageCount;
 
-        private const uint DefaultImageCount = 4;
+        private const uint DefaultImageCount = 3;
 
         private const uint DefaultDelaySeconds = 5;
 
