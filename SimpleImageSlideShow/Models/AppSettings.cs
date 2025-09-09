@@ -8,7 +8,7 @@ namespace SimpleImageSlideShow.Models
         public string LastMode { get; set; } = "Slide";
 
         // Tiled mode settings
-        public int TiledFillTargetPercent { get; set; } = 80; // 70-100
+        public int TiledFillTargetPercent { get; set; } = 100; // 70-100
         public double TiledMinScale { get; set; } = 0.5;      // 0.1-1.0
         public int TiledCols { get; set; } = 6;                // current-screen columns (square tiles)
         public int MinTilePx { get; set; } = 128;              // min tile width (px)
