@@ -41,7 +41,7 @@
     {
         var style = $"left:{item.Left}px;top:{item.Top}px;width:{item.Width}px;height:{item.Height}px;";
         var imgStyle = $"width:{Math.Round(item.ImgWidth)}px;height:{Math.Round(item.ImgHeight)}px;";
-        <div class="tile-item @(item.Removing ? "removing" : "")" style="@style">
+        <div @key="item.Id" class="tile-item @(item.Removing ? "removing" : "")" style="@style">
             <img src="@item.Src" alt="img" style="@imgStyle" />
         </div>
     }

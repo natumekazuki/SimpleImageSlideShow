@@ -15,6 +15,7 @@
     align-items: center;
     justify-content: center;
     opacity: 0;
+    will-change: opacity;
     animation: fadeIn 300ms ease-out forwards;
 }
 
