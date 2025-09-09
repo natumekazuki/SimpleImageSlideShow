@@ -71,6 +71,11 @@ namespace SimpleImageSlideShow.Components.Pages
         private readonly LinkedList<string> _dataUrlLru = new();
         private const int DataUrlCacheCapacity = 256;
 
+        // Reuse TTL: avoid reusing the same image too soon
+        private readonly Dictionary<string, DateTime> _cooldown = new(StringComparer.OrdinalIgnoreCase);
+        private readonly PriorityQueue<string, long> _cooldownQueue = new();
+        private int ReuseTtlSeconds = 120;
+
         private static async Task<string> SelectDirectoryAsync()
         {
             var mauiWindow = Application.Current?.Windows[0].Handler.PlatformView as Microsoft.UI.Xaml.Window;
@@ -91,6 +96,7 @@ namespace SimpleImageSlideShow.Components.Pages
             DirectoryPath = settings.DirectoryPath;
             TiledCols = settings.TiledCols > 0 ? settings.TiledCols : 6;
             MinTilePx = settings.MinTilePx > 0 ? settings.MinTilePx : 128;
+            ReuseTtlSeconds = settings.TiledReuseTtlSeconds > 0 ? settings.TiledReuseTtlSeconds : 120;
             PanelWidth = 560;
             PanelHeight = 260;
 
@@ -230,6 +236,7 @@ namespace SimpleImageSlideShow.Components.Pages
             SetOwners(item, true);
             Items.Add(item);
             UsedPaths.Add(entity.FilePath);
+            AddCooldown(entity.FilePath);
             return true;
         }
 
@@ -280,6 +287,7 @@ namespace SimpleImageSlideShow.Components.Pages
                     SetOwners(item0, true);
                     Items.Add(item0);
                     UsedPaths.Add(entity.FilePath);
+                    AddCooldown(entity.FilePath);
                     return;
                 }
 
@@ -333,6 +341,7 @@ namespace SimpleImageSlideShow.Components.Pages
                 SetOwners(item, true);
                 Items.Add(item);
                 UsedPaths.Add(entity.FilePath);
+                AddCooldown(entity.FilePath);
                 return;
             }
         }
@@ -684,6 +693,17 @@ namespace SimpleImageSlideShow.Components.Pages
         private async Task<string> GetRandomUnusedPathAsync()
         {
             int tries = GetImageTryCount();
+            CleanupCooldown();
+            var now = DateTime.UtcNow;
+            for (int i = 0; i < tries; i++)
+            {
+                var p = ImageService.GetRandomImagePath();
+                if (string.IsNullOrWhiteSpace(p)) return string.Empty;
+                if (UsedPaths.Contains(p)) { await Task.Yield(); continue; }
+                if (_cooldown.TryGetValue(p, out var until) && until > now) { await Task.Yield(); continue; }
+                return p;
+            }
+            // Fallback: ignore TTL but avoid duplicates on screen
             for (int i = 0; i < tries; i++)
             {
                 var p = ImageService.GetRandomImagePath();
@@ -753,9 +773,38 @@ namespace SimpleImageSlideShow.Components.Pages
             settings.LastMode = "Tiled";
             settings.TiledCols = TiledCols;
             settings.MinTilePx = MinTilePx;
+            settings.TiledReuseTtlSeconds = ReuseTtlSeconds;
             // keep panel size fixed; stop persisting size
             await SettingsService.SaveAsync(settings);
             await StartAsync();
+        }
+
+        private void AddCooldown(string path)
+        {
+            try
+            {
+                var until = DateTime.UtcNow.AddSeconds(Math.Max(1, ReuseTtlSeconds));
+                _cooldown[path] = until;
+                _cooldownQueue.Enqueue(path, until.Ticks);
+            }
+            catch { }
+        }
+
+        private void CleanupCooldown()
+        {
+            try
+            {
+                var nowTicks = DateTime.UtcNow.Ticks;
+                while (_cooldownQueue.TryPeek(out var path, out var ticks) && ticks <= nowTicks)
+                {
+                    _cooldownQueue.Dequeue();
+                    if (_cooldown.TryGetValue(path, out var dt) && dt.Ticks <= nowTicks)
+                    {
+                        _cooldown.Remove(path);
+                    }
+                }
+            }
+            catch { }
         }
 
         private async Task ChooseAndApplyFolderAsync()
