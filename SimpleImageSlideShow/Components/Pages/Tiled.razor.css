@@ -1,0 +1,41 @@
+/* Reuse control-panel styles from app.css; here adjust if needed */
+
+.control-panel .panel-body {
+    width: 560px;   /* larger settings panel for tiled mode */
+    height: 260px;
+}
+
+.control-panel input[type="range"] {
+    width: 420px;
+}
+
+.tile-item {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    animation: fadeIn 300ms ease-out forwards;
+}
+
+.tile-item img {
+    /* explicit pixel size is set inline to honor source-scale */
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    display: block;
+}
+
+.tile-item.removing {
+    animation: fadeOut 300ms ease-in forwards;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes fadeOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
+}

@@ -24,6 +24,43 @@
     </div>
 
     <script src="_framework/blazor.webview.js" autostart="false"></script>
+    <script>
+      (function(){
+        var timer;
+        var delay = 2000;
+        function showCursor(){ document.body.classList.remove('hide-cursor'); }
+        function scheduleHide(){
+          clearTimeout(timer);
+          showCursor();
+          timer = setTimeout(function(){ document.body.classList.add('hide-cursor'); }, delay);
+        }
+        ['mousemove','mousedown','mouseenter','touchstart','wheel','pointermove'].forEach(function(ev){
+          window.addEventListener(ev, scheduleHide, { passive: true });
+        });
+        scheduleHide();
+      })();
+      window.app = window.app || {};
+      window.app.addResizeListener = function(dotnetRef){
+        function h(){ dotnetRef.invokeMethodAsync('OnResize', window.innerWidth, window.innerHeight); }
+        window.addEventListener('resize', h);
+        h();
+        return { dispose: function(){ window.removeEventListener('resize', h); } };
+      };
+
+      window.app.enablePanelInteraction = function(panelId, dotnetRef){
+        var panel = document.getElementById(panelId);
+        if(!panel) return;
+        // Observe size only (no drag), to persist width/height
+        try {
+          var ro = new ResizeObserver(function(){
+            var cs = window.getComputedStyle(panel);
+            var w = parseFloat(cs.width)||0, h = parseFloat(cs.height)||0;
+            dotnetRef.invokeMethodAsync('OnPanelSizeChanged', w, h);
+          });
+          ro.observe(panel);
+        } catch {}
+      };
+    </script>
 </body>
 
 </html>

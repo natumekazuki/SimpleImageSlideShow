@@ -167,23 +167,59 @@ h1:focus {
     overflow: hidden;
 }
 
+.control-panel {
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    z-index: 1000;
+    width: 32px; /* hover hotspot */
+    height: 32px;
+}
+
+.control-panel .panel-body {
+    display: none;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 50vw;   /* 固定サイズ（大きめ） */
+    height: 50vh;  /* 固定サイズ（大きめ） */
+    background: rgba(255,255,255,0.98);
+    padding: 10px 12px;
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    overflow: auto;
+}
+
+.control-panel:hover .panel-body { display: block; }
+
+.control-panel .form-label {
+    display: block;
+    font-size: 0.8rem;
+    margin-bottom: 2px;
+}
+
+.control-panel .buttons { margin-top: 8px; }
+
+.control-panel input[type="range"] { width: 400px; }
+
 .slide {
     position: absolute;
-    width: 50vw;
+    /* dynamic width based on viewport and image aspect */
+    --img-w: min(80vw, calc(90vh / var(--aspect-ratio)));
+    --img-h: calc(var(--img-w) * var(--aspect-ratio));
+    width: var(--img-w);
     height: auto;
     animation-name: slide-left;
     animation-timing-function: linear;
     animation-fill-mode: forwards;
     animation-duration: 10s;
-    top: calc( 30vh + (
-        (100vh - (40vw * var(--aspect-ratio)) - 30vh)
-      * var(--offset)
-    ) );
+    /* place vertical center randomly within viewport */
+    top: calc( (var(--img-h) / 2) + ((100vh - var(--img-h)) * var(--offset)) );
 }
 
 
     .slide img {
-        width: 50vw;
+        width: var(--img-w);
         height: auto;
     }
 
@@ -196,3 +232,6 @@ h1:focus {
         transform: translate(-110%, -50%);
     }
 }
+
+/* Auto-hide cursor after inactivity */
+body.hide-cursor, body.hide-cursor * { cursor: none !important; }

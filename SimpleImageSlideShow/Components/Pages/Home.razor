@@ -1,23 +1,40 @@
 ﻿@page "/"
 
+<div class="control-panel" title="Settings">
+    <div class="panel-body">
+        <div class="row g-2 align-items-center">
+            <div>
+                <label class="form-label">Mode</label>
+                <div>
+                    <button class="btn btn-sm btn-primary" disabled>Slide</button>
+                    <button class="btn btn-sm btn-outline-primary ms-1" @onclick='() => SwitchMode("Tiled")'>Tiled</button>
+                </div>
+            </div>
+            <div>
+                <label class="form-label">Delay (sec): @DelaySeconds</label>
+                <input type="range" min="1" max="@DelayMax" value="@DelaySeconds" @oninput="OnDelayInput" />
+            </div>
+            <div>
+                <label class="form-label">Count: @ImageCount</label>
+                <input type="range" min="1" max="@CountMax" value="@ImageCount" @oninput="OnCountInput" />
+            </div>
+            <div class="buttons">
+                <button class="btn btn-sm btn-primary" @onclick="SaveAndApplyAsync">Save</button>
+                <button class="btn btn-sm btn-secondary" @onclick="ChooseAndApplyFolderAsync">Change Folder</button>
+                <button class="btn btn-sm btn-danger" @onclick="ExitApp">Exit</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="slideshow-container">
 
-    @if (this.ImageEntities_1.Count > 0)
+    @if (this.Slides.Count > 0)
     {
-        @foreach (var imageEntity in this.ImageEntities_1)
+        @foreach (var imageEntity in this.Slides)
         {
             <div class="slide @imageEntity.CssClass" style="@imageEntity.CssVariables animation-duration:@($"{AnimationDelaySeconds}s")">
-                <img src="@imageEntity.ImageUrl" alt="Image" class="img-fluid" />
-            </div>
-        }
-    }
-
-    @if (this.ImageEntities_2.Count > 0)
-    {
-        @foreach (var imageEntity in this.ImageEntities_2)
-        {
-            <div class="slide @imageEntity.CssClass" style="@imageEntity.CssVariables animation-duration:@($"{AnimationDelaySeconds}s")">
-                <img src="@imageEntity.ImageUrl" alt="Image" class="img-fluid" />
+                <img src="@GetSrc(imageEntity)" alt="Image" class="img-fluid" />
             </div>
         }
     }

@@ -2,22 +2,39 @@
 using SimpleImageSlideShow.Models;
 using SimpleImageSlideShow.Services;
 using Windows.Storage.Pickers;
+using System.IO;
 
 namespace SimpleImageSlideShow.Components.Pages
 {
-    public sealed partial class Home
+    public sealed partial class Home : IDisposable
     {
         [Inject]
         public required IImageService ImageService { get; init; }
 
-        private List<IImageEntity> ImageEntities_1 { get; set; } = [];
-        private List<IImageEntity> ImageEntities_2 { get; set; } = [];
+        [Inject]
+        public required ISettingsService SettingsService { get; init; }
+
+        [Inject]
+        public required NavigationManager Nav { get; init; }
+
+        [Inject]
+        public required IWindowService WindowService { get; init; }
+
+        [Inject]
+        public required IWebViewHostService WebViewHost { get; init; }
+
+        private List<IImageEntity> Slides { get; set; } = [];
 
         private uint DelaySeconds { get; set; } = DefaultDelaySeconds;
 
         private uint AnimationDelaySeconds => this.DelaySeconds * this.ImageCount;
 
         private uint ImageCount { get; set; } = DefaultImageCount;
+        private string? DirectoryPath { get; set; }
+
+        // fixed slider bounds
+        private const uint DelayMax = 60;
+        private const uint CountMax = 10;
 
         private const uint DefaultImageCount = 3;
 
@@ -35,90 +52,176 @@ namespace SimpleImageSlideShow.Components.Pages
             return folderPicked is not null ? folderPicked.Path : string.Empty;
         }
 
-        private System.Timers.Timer Timer = new(TimeSpan.FromSeconds(DefaultDelaySeconds));
+        // non-overlapping periodic loop
+        private CancellationTokenSource? _cts;
+        private Task? _loopTask;
 
-        private async Task UpdateTimerAsync()
+        private async Task RestartLoopAsync()
         {
-            this.Timer.Stop();
+            await StopLoopAsync();
 
-            this.ImageEntities_1.Clear();
-            await this.ReloadImageAsync();
+            // sanitize
+            if (DelaySeconds < 1) DelaySeconds = 1;
+            if (ImageCount < 1) ImageCount = 1;
 
-            this.Timer = new(TimeSpan.FromSeconds(DelaySeconds));
-            Timer.AutoReset = true;
-            Timer.Elapsed += async (_, __) =>
+            // keep existing slides; only update tick period
+
+            _cts = new CancellationTokenSource();
+            var token = _cts.Token;
+            var period = TimeSpan.FromSeconds(DelaySeconds);
+            var timer = new PeriodicTimer(period);
+            _loopTask = Task.Run(async () =>
             {
-                await InvokeAsync(async () =>
+                try
                 {
-                    await this.ReloadImageAsync();
-                    this.StateHasChanged();
-                });
-            };
-            Timer.Start();
+                    while (await timer.WaitForNextTickAsync(token))
+                    {
+                        await InvokeAsync(async () =>
+                        {
+                            await this.ReloadImageAsync();
+                            this.StateHasChanged();
+                        });
+                    }
+                }
+                catch (OperationCanceledException) { }
+                finally { timer.Dispose(); }
+            }, token);
         }
 
-        private async Task LoadImagesAsync()
+        private async Task StopLoopAsync()
+        {
+            try
+            {
+                _cts?.Cancel();
+                if (_loopTask is not null)
+                {
+                    await Task.WhenAny(_loopTask, Task.Delay(500));
+                }
+            }
+            catch { }
+            finally
+            {
+                _cts?.Dispose();
+                _cts = null;
+                _loopTask = null;
+            }
+        }
+
+        private async Task ChooseAndApplyFolderAsync()
         {
             var directoryPath = await SelectDirectoryAsync();
             if (string.IsNullOrWhiteSpace(directoryPath)) return;
 
+            DirectoryPath = directoryPath;
             ImageService.LoadImages(directoryPath);
+            WebViewHost.MapImagesFolder(directoryPath);
+            var settings = new AppSettings { DelaySeconds = this.DelaySeconds, ImageCount = this.ImageCount, DirectoryPath = this.DirectoryPath };
+            await SettingsService.SaveAsync(settings);
+            await RestartLoopAsync();
+            await InvokeAsync(StateHasChanged);
         }
 
-        private bool useFirstList = true;
+        private async Task EnsureFolderLoadedAsync()
+        {
+            if (!string.IsNullOrWhiteSpace(DirectoryPath) && Directory.Exists(DirectoryPath))
+            {
+                ImageService.LoadImages(DirectoryPath);
+                WebViewHost.MapImagesFolder(DirectoryPath);
+                return;
+            }
+            await ChooseAndApplyFolderAsync();
+        }
 
         private async Task ReloadImageAsync()
         {
             var imagePath = ImageService.GetRandomImagePath();
             var imageEntity = await ImageService.LoadImageEntityAsync(imagePath);
             if (imageEntity is null) return;
+            Slides.Add(imageEntity);
+            _ = RemoveAfterAsync(imageEntity, AnimationDelaySeconds);
+        }
 
-            if (useFirstList)
+        private async Task RemoveAfterAsync(IImageEntity entity, uint seconds)
+        {
+            var token = _cts?.Token ?? CancellationToken.None;
+            try { await Task.Delay(TimeSpan.FromSeconds(seconds), token); }
+            catch (OperationCanceledException) { return; }
+            await InvokeAsync(() =>
             {
-                ImageEntities_1.Add(imageEntity);
+                Slides.Remove(entity);
+                StateHasChanged();
+            });
+        }
 
-                if (ImageEntities_1.Count == 9)
-                {
-                    // 次でImageEntities_1に戻る直前にImageEntities_2をクリア
-                    ImageEntities_2.Clear();
-                }
+        private void ExitApp()
+        {
+            WindowService.Exit();
+        }
 
-                if (ImageEntities_1.Count % 10 == 0)
-                {
-                    useFirstList = false;
-                }
-            }
-            else
+        private void OnDelayInput(ChangeEventArgs e)
+        {
+            if (e.Value is string s && uint.TryParse(s, out var v))
             {
-                ImageEntities_2.Add(imageEntity);
-                if (ImageEntities_2.Count == 9)
-                {
-                    // 次でImageEntities_2に戻る直前にImageEntities_1をクリア
-                    ImageEntities_1.Clear();
-                }
-                if (ImageEntities_2.Count % 10 == 0)
-                {
-                    useFirstList = true;
-                }
+                DelaySeconds = Math.Max(1u, v);
             }
         }
+
+        private void OnCountInput(ChangeEventArgs e)
+        {
+            if (e.Value is string s && uint.TryParse(s, out var v))
+            {
+                ImageCount = Math.Max(1u, v);
+            }
+        }
+
+        private async Task SaveAndApplyAsync()
+        {
+            var settings = new AppSettings { DelaySeconds = this.DelaySeconds, ImageCount = this.ImageCount, DirectoryPath = this.DirectoryPath, LastMode = "Slide" };
+            await SettingsService.SaveAsync(settings);
+            await RestartLoopAsync();
+            await InvokeAsync(StateHasChanged);
+        }
+
+        private string GetSrc(IImageEntity entity)
+        {
+            if (string.IsNullOrWhiteSpace(DirectoryPath)) return entity.ImageUrl;
+            string rel = Path.GetRelativePath(DirectoryPath, entity.FilePath).Replace('\\', '/');
+            return $"https://{WebViewHost.HostName}/{rel}";
+        }
+
         protected override async Task OnInitializedAsync()
         {
             await base.OnInitializedAsync();
 
-            await this.LoadImagesAsync();
-            await this.ReloadImageAsync();
-
-            Timer.AutoReset = true;
-            Timer.Elapsed += async (_, __) =>
+            // load settings
+            var settings = await SettingsService.LoadAsync();
+            if (string.Equals(settings.LastMode, "Tiled", StringComparison.OrdinalIgnoreCase))
             {
-                await InvokeAsync(async () =>
-                {
-                    await this.ReloadImageAsync();
-                    this.StateHasChanged();
-                });
-            };
-            Timer.Start();
+                Nav.NavigateTo("/tiled");
+                return;
+            }
+            this.DelaySeconds = settings.DelaySeconds > 0 ? settings.DelaySeconds : DefaultDelaySeconds;
+            this.ImageCount = settings.ImageCount > 0 ? settings.ImageCount : DefaultImageCount;
+            this.DirectoryPath = settings.DirectoryPath;
+
+            await EnsureFolderLoadedAsync();
+            await this.ReloadImageAsync();
+            await RestartLoopAsync();
+        }
+
+        private async Task SwitchMode(string mode)
+        {
+            var settings = await SettingsService.LoadAsync();
+            settings.LastMode = mode;
+            await SettingsService.SaveAsync(settings);
+            if (string.Equals(mode, "Tiled", StringComparison.OrdinalIgnoreCase))
+                Nav.NavigateTo("/tiled");
+        }
+
+        public void Dispose()
+        {
+            _ = StopLoopAsync();
+            ImageService.Dispose();
         }
     }
 }

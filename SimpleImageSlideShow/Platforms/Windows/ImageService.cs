@@ -3,7 +3,7 @@ using SimpleImageSlideShow.Services;
 
 namespace SimpleImageSlideShow.Platforms.Windows
 {
-    internal class ImageService(FrameService frameService) : IImageService
+    internal class ImageService : IImageService
     {
         private static readonly Random Rng = new();
 
@@ -28,27 +28,33 @@ namespace SimpleImageSlideShow.Platforms.Windows
 
         async Task<IImageEntity?> IImageService.LoadImageEntityAsync(string imagePath)
         {
-            if (string.IsNullOrWhiteSpace(imagePath) || !File.Exists(imagePath))
+            try
+            {
+                if (string.IsNullOrWhiteSpace(imagePath) || !File.Exists(imagePath))
+                {
+                    return await Task.FromResult<ImageEntity?>(null);
+                }
+
+                using var img = System.Drawing.Image.FromFile(imagePath);
+                double width = img.Width;
+                double height = img.Height;
+
+                byte[] bytes = await File.ReadAllBytesAsync(imagePath);
+
+                return new ImageEntity()
+                {
+                    FilePath = imagePath,
+                    BytesImage = bytes,
+                    Width = width,
+                    Height = height,
+                    CssClass = string.Empty,
+                    Offset = this.RandomOffset()
+                };
+            }
+            catch
             {
                 return await Task.FromResult<ImageEntity?>(null);
             }
-
-            using var img = System.Drawing.Image.FromFile(imagePath);
-            double width = img.Width;
-            double height = img.Height;
-            img.Dispose();
-
-            byte[] bytes = await File.ReadAllBytesAsync(imagePath);
-
-            return new ImageEntity()
-            {
-                FilePath = imagePath,
-                BytesImage = bytes,
-                Width = width,
-                Height = height,
-                CssClass = frameService.GetFrameCss(),
-                Offset = this.RandomOffset()
-            };
         }
 
         IEnumerable<string> IImageService.LoadImages(string directoryPath)
@@ -111,7 +117,7 @@ namespace SimpleImageSlideShow.Platforms.Windows
                     AllImages.RemoveAll(p => p.Equals(e.OldFullPath, StringComparison.OrdinalIgnoreCase));
                 }
 
-                if (!Models.ImageExtensions.IsImageFile(newExt))
+                if (Models.ImageExtensions.IsImageFile(newExt))
                 {
                     AllImages.Add(e.FullPath);
                 }
