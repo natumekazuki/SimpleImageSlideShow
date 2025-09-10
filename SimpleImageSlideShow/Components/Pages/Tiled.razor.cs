@@ -2,20 +2,30 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using SimpleImageSlideShow.Models;
 using SimpleImageSlideShow.Services;
-using Windows.Storage.Pickers;
 using System.Globalization;
-using System.Threading;
+using Windows.Storage.Pickers;
 
 namespace SimpleImageSlideShow.Components.Pages
 {
     public sealed partial class Tiled : IAsyncDisposable
     {
-        [Inject] public required IImageService ImageService { get; init; }
-        [Inject] public required ISettingsService SettingsService { get; init; }
-        [Inject] public required IWindowService WindowService { get; init; }
-        [Inject] public required IWebViewHostService WebViewHost { get; init; }
-        [Inject] public required NavigationManager Nav { get; init; }
-        [Inject] public required IJSRuntime JS { get; init; }
+        [Inject]
+        public required IImageService ImageService { get; init; }
+
+        [Inject]
+        public required ISettingsService SettingsService { get; init; }
+
+        [Inject]
+        public required IWindowService WindowService { get; init; }
+
+        [Inject]
+        public required IWebViewHostService WebViewHost { get; init; }
+
+        [Inject]
+        public required NavigationManager Nav { get; init; }
+
+        [Inject]
+        public required IJSRuntime JS { get; init; }
 
         private ElementReference ContainerRef;
 
@@ -177,9 +187,7 @@ namespace SimpleImageSlideShow.Components.Pages
             UsedPaths.Clear();
         }
 
-        private bool _primed = false;
-
-        private async Task PrimeInitialAsync()
+        private static async Task PrimeInitialAsync()
         {
             // Initial prime disabled to avoid burst loads and duplicates
             await Task.CompletedTask;
@@ -259,11 +267,11 @@ namespace SimpleImageSlideShow.Components.Pages
             var baseFit = GetBaseFitScale(entity);
             var rand = Random.Shared.NextDouble() * (1.0 - MinScale) + MinScale; // [MinScale,1]
             var scale = baseFit * rand;
-            // First try avoiding clock area; fallback to allowing it
+            // Strict: only place avoiding clock area in this phase.
+            // If it doesn't fit, return false so removal phase can try.
             if (!TryPlaceScaled(entity, baseFit, ref rand, out var item, avoidClock: true))
             {
-                if (!TryPlaceScaled(entity, baseFit, ref rand, out item, avoidClock: false))
-                    return false;
+                return false;
             }
 
             FillCells(item.Row, item.Col, item.RowSpan, item.ColSpan, true);
@@ -612,7 +620,7 @@ namespace SimpleImageSlideShow.Components.Pages
         private bool FindBestRectToClear(int reqRows, int reqCols, out int bestR, out int bestC, out List<TiledItem> toRemove)
         {
             bestR = bestC = -1;
-            toRemove = new List<TiledItem>();
+            toRemove = [];
             int bestCount = int.MaxValue;
             int totalPositions = Math.Max(1, (Rows - reqRows + 1) * (Cols - reqCols + 1));
             int budget = GetProbeLimit(totalPositions);
@@ -675,7 +683,7 @@ namespace SimpleImageSlideShow.Components.Pages
         private List<TiledItem> GetOverlaps(int row, int col, int rowSpan, int colSpan)
         {
             var set = new HashSet<TiledItem>();
-            if (Owners is null) return new List<TiledItem>();
+            if (Owners is null) return [];
             for (int r = row; r < row + rowSpan; r++)
             {
                 for (int c = col; c < col + colSpan; c++)
@@ -684,7 +692,7 @@ namespace SimpleImageSlideShow.Components.Pages
                     if (it is not null) set.Add(it);
                 }
             }
-            return set.ToList();
+            return [.. set];
         }
 
         private bool TryPlace(int rowSpan, int colSpan, out int row, out int col, bool avoidClock)
