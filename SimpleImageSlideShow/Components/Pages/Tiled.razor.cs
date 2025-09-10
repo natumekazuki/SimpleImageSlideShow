@@ -40,7 +40,6 @@ namespace SimpleImageSlideShow.Components.Pages
         private HashSet<string> UsedPaths { get; } = new(StringComparer.OrdinalIgnoreCase);
 
         private uint DelaySeconds { get; set; } = 5;
-        private int FillTargetPercent { get; set; } = 80;
         private double MinScale { get; set; } = 0.5;
         private string? DirectoryPath { get; set; }
         private string HostName => WebViewHost.HostName;
@@ -72,6 +71,11 @@ namespace SimpleImageSlideShow.Components.Pages
         private readonly LinkedList<string> _dataUrlLru = new();
         private const int DataUrlCacheCapacity = 256;
 
+        // Reuse TTL: avoid reusing the same image too soon
+        private readonly Dictionary<string, DateTime> _cooldown = new(StringComparer.OrdinalIgnoreCase);
+        private readonly PriorityQueue<string, long> _cooldownQueue = new();
+        private int ReuseTtlSeconds = 120;
+
         private static async Task<string> SelectDirectoryAsync()
         {
             var mauiWindow = Application.Current?.Windows[0].Handler.PlatformView as Microsoft.UI.Xaml.Window;
@@ -88,11 +92,11 @@ namespace SimpleImageSlideShow.Components.Pages
         {
             var settings = await SettingsService.LoadAsync();
             DelaySeconds = settings.DelaySeconds > 0 ? settings.DelaySeconds : 5;
-            FillTargetPercent = Math.Clamp(settings.TiledFillTargetPercent, 70, 100);
             MinScale = Math.Clamp(settings.TiledMinScale, 0.1, 1.0);
             DirectoryPath = settings.DirectoryPath;
             TiledCols = settings.TiledCols > 0 ? settings.TiledCols : 6;
             MinTilePx = settings.MinTilePx > 0 ? settings.MinTilePx : 128;
+            ReuseTtlSeconds = settings.TiledReuseTtlSeconds > 0 ? settings.TiledReuseTtlSeconds : 120;
             PanelWidth = 560;
             PanelHeight = 260;
 
@@ -113,11 +117,6 @@ namespace SimpleImageSlideShow.Components.Pages
             ViewportW = Math.Max(1, w);
             ViewportH = Math.Max(1, h);
             RecomputeGrid();
-            if (!_primed)
-            {
-                await PrimeInitialAsync();
-                _primed = true;
-            }
             await InvokeAsync(StateHasChanged);
         }
 
@@ -150,16 +149,8 @@ namespace SimpleImageSlideShow.Components.Pages
 
         private async Task PrimeInitialAsync()
         {
-            // Fill up to FillTarget% quickly on first render (cap to 50 iterations)
-            int safeguard = 50;
-            while (safeguard-- > 0 && OccupancyPercent() < FillTargetPercent - 0.01)
-            {
-                var ok = await AddOneAsync();
-                if (!ok)
-                {
-                    await ClearAndAddOneGuaranteedAsync();
-                }
-            }
+            // Initial prime disabled to avoid burst loads and duplicates
+            await Task.CompletedTask;
         }
 
         private async Task StartAsync()
@@ -217,24 +208,14 @@ namespace SimpleImageSlideShow.Components.Pages
         private async Task StepAsync()
         {
             if (Occupied is null) return;
-            var occ = OccupancyPercent();
-            if (occ < FillTargetPercent - 0.01)
+            var added = await AddOneAsync();
+            if (!added)
             {
-                var added = await AddOneAsync();
-                if (!added)
-                {
-                    // Ensure progress: clear overlapping items to place one at >= MinScale
-                    await ClearAndAddOneGuaranteedAsync();
-                }
-            }
-            else if (Items.Count > 0)
-            {
-                // Guarantee change: clear and place one
-                await ClearAndAddOneGuaranteedAsync();
+                await AddWithFifoRemovalAsync();
             }
         }
 
-        // Replace phase now uses ClearAndAddOneGuaranteedAsync
+        // Replace phase now uses FIFO-based removal strategy
 
         private async Task<bool> AddOneAsync()
         {
@@ -255,7 +236,175 @@ namespace SimpleImageSlideShow.Components.Pages
             SetOwners(item, true);
             Items.Add(item);
             UsedPaths.Add(entity.FilePath);
+            AddCooldown(entity.FilePath);
             return true;
+        }
+
+        // Insert at initially chosen scale, removing oldest tiles (FIFO) until placement is possible.
+        private async Task AddWithFifoRemovalAsync()
+        {
+            // pick a candidate image
+            const int imageTries = 40;
+            for (int t = 0; t < imageTries; t++)
+            {
+                var imagePath = await GetRandomUnusedPathAsync();
+                if (string.IsNullOrWhiteSpace(imagePath)) return;
+                var entity = await ImageService.LoadImageEntityAsync(imagePath);
+                if (entity is null) continue;
+
+                // choose initial scale once and do NOT degrade it
+                var baseFit = GetBaseFitScale(entity);
+                var rand = Random.Shared.NextDouble() * (1.0 - MinScale) + MinScale; // [MinScale,1]
+                var scale = baseFit * rand;
+                var sw = entity.Width * scale;
+                var sh = entity.Height * scale;
+                int reqCols = Math.Max(1, (int)Math.Ceiling(sw / TileW));
+                int reqRows = Math.Max(1, (int)Math.Ceiling(sh / TileH));
+
+                // if cannot fit even on an empty grid, skip this image
+                if (reqCols > Cols || reqRows > Rows) continue;
+
+                // try without removal first
+                if (TryPlace(reqRows, reqCols, out var r0, out var c0))
+                {
+                    var item0 = new TiledItem
+                    {
+                        Path = entity.FilePath,
+                        Row = r0,
+                        Col = c0,
+                        RowSpan = reqRows,
+                        ColSpan = reqCols,
+                        Left = OffsetX + c0 * TileW,
+                        Top = OffsetY + r0 * TileH,
+                        Width = reqCols * TileW,
+                        Height = reqRows * TileH,
+                        Scale = scale,
+                        ImgWidth = sw,
+                        ImgHeight = sh,
+                        Src = BuildVirtualHostUrl(entity.FilePath)
+                    };
+                    FillCells(item0.Row, item0.Col, item0.RowSpan, item0.ColSpan, true);
+                    SetOwners(item0, true);
+                    Items.Add(item0);
+                    UsedPaths.Add(entity.FilePath);
+                    AddCooldown(entity.FilePath);
+                    return;
+                }
+
+                // simulate FIFO removals on a copy of the occupancy grid to find minimal removals
+                if (!TryComputeFifoRemovalForPlacement(reqRows, reqCols, out int removeCount, out int rr, out int cc))
+                {
+                    // couldn't compute (should be rare), try another image
+                    continue;
+                }
+
+                // perform a single batch removal animation for the first removeCount items
+                if (removeCount > 0)
+                {
+                    int toRemove = Math.Min(removeCount, Items.Count);
+                    for (int i = 0; i < toRemove; i++)
+                    {
+                        var it = Items[i];
+                        it.Removing = true;
+                    }
+                    StateHasChanged();
+                    await Task.Delay(300);
+
+                    for (int i = 0; i < toRemove; i++)
+                    {
+                        var it = Items[0]; // always oldest
+                        FillCells(it.Row, it.Col, it.RowSpan, it.ColSpan, false);
+                        SetOwners(it, false);
+                        Items.RemoveAt(0);
+                        UsedPaths.Remove(it.Path);
+                    }
+                }
+
+                // place new item at the precomputed location
+                var item = new TiledItem
+                {
+                    Path = entity.FilePath,
+                    Row = rr,
+                    Col = cc,
+                    RowSpan = reqRows,
+                    ColSpan = reqCols,
+                    Left = OffsetX + cc * TileW,
+                    Top = OffsetY + rr * TileH,
+                    Width = reqCols * TileW,
+                    Height = reqRows * TileH,
+                    Scale = scale,
+                    ImgWidth = sw,
+                    ImgHeight = sh,
+                    Src = BuildVirtualHostUrl(entity.FilePath)
+                };
+                FillCells(item.Row, item.Col, item.RowSpan, item.ColSpan, true);
+                SetOwners(item, true);
+                Items.Add(item);
+                UsedPaths.Add(entity.FilePath);
+                AddCooldown(entity.FilePath);
+                return;
+            }
+        }
+
+        private bool TryComputeFifoRemovalForPlacement(int reqRows, int reqCols, out int removeCount, out int row, out int col)
+        {
+            removeCount = 0; row = col = -1;
+            if (Occupied is null) return false;
+
+            // copy occupancy
+            var occSim = new bool[Rows, Cols];
+            for (int r = 0; r < Rows; r++)
+                for (int c = 0; c < Cols; c++)
+                    occSim[r, c] = Occupied[r, c];
+
+            // quick success without removals
+            if (TryPlaceSim(reqRows, reqCols, occSim, out row, out col))
+            {
+                removeCount = 0;
+                return true;
+            }
+
+            // progressively clear oldest tiles and test
+            for (int k = 1; k <= Items.Count; k++)
+            {
+                var it = Items[k - 1];
+                FillCellsSim(it.Row, it.Col, it.RowSpan, it.ColSpan, occSim, false);
+                if (TryPlaceSim(reqRows, reqCols, occSim, out row, out col))
+                {
+                    removeCount = k;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool TryPlaceSim(int rowSpan, int colSpan, bool[,] occ, out int row, out int col)
+        {
+            row = col = -1;
+            int rows = occ.GetLength(0);
+            int cols = occ.GetLength(1);
+            for (int r = 0; r <= rows - rowSpan; r++)
+            {
+                for (int c = 0; c <= cols - colSpan; c++)
+                {
+                    bool ok = true;
+                    for (int rr = r; rr < r + rowSpan && ok; rr++)
+                        for (int cc = c; cc < c + colSpan; cc++)
+                            if (occ[rr, cc]) { ok = false; break; }
+                    if (ok) { row = r; col = c; return true; }
+                }
+            }
+            return false;
+        }
+
+        private static void FillCellsSim(int row, int col, int rowSpan, int colSpan, bool[,] occ, bool value)
+        {
+            int rows = occ.GetLength(0);
+            int cols = occ.GetLength(1);
+            for (int r = row; r < row + rowSpan && r < rows; r++)
+                for (int c = col; c < col + colSpan && c < cols; c++)
+                    occ[r, c] = value;
         }
 
         private bool TryPlaceScaled(IImageEntity entity, double baseFit, ref double randScale, out TiledItem item)
@@ -544,6 +693,17 @@ namespace SimpleImageSlideShow.Components.Pages
         private async Task<string> GetRandomUnusedPathAsync()
         {
             int tries = GetImageTryCount();
+            CleanupCooldown();
+            var now = DateTime.UtcNow;
+            for (int i = 0; i < tries; i++)
+            {
+                var p = ImageService.GetRandomImagePath();
+                if (string.IsNullOrWhiteSpace(p)) return string.Empty;
+                if (UsedPaths.Contains(p)) { await Task.Yield(); continue; }
+                if (_cooldown.TryGetValue(p, out var until) && until > now) { await Task.Yield(); continue; }
+                return p;
+            }
+            // Fallback: ignore TTL but avoid duplicates on screen
             for (int i = 0; i < tries; i++)
             {
                 var p = ImageService.GetRandomImagePath();
@@ -573,13 +733,7 @@ namespace SimpleImageSlideShow.Components.Pages
             }
         }
 
-        private void OnFillInput(ChangeEventArgs e)
-        {
-            if (e.Value is string s && int.TryParse(s, out var v))
-            {
-                FillTargetPercent = Math.Clamp(v, 70, 100);
-            }
-        }
+        // Fill target control removed: always aim to fully occupy the grid
 
         private void OnScaleInput(ChangeEventArgs e)
         {
@@ -613,15 +767,44 @@ namespace SimpleImageSlideShow.Components.Pages
         {
             var settings = await SettingsService.LoadAsync();
             settings.DelaySeconds = DelaySeconds;
-            settings.TiledFillTargetPercent = FillTargetPercent;
+            // Fill target is implicit (100%); not persisted anymore
             settings.TiledMinScale = MinScale;
             settings.DirectoryPath = DirectoryPath;
             settings.LastMode = "Tiled";
             settings.TiledCols = TiledCols;
             settings.MinTilePx = MinTilePx;
+            settings.TiledReuseTtlSeconds = ReuseTtlSeconds;
             // keep panel size fixed; stop persisting size
             await SettingsService.SaveAsync(settings);
             await StartAsync();
+        }
+
+        private void AddCooldown(string path)
+        {
+            try
+            {
+                var until = DateTime.UtcNow.AddSeconds(Math.Max(1, ReuseTtlSeconds));
+                _cooldown[path] = until;
+                _cooldownQueue.Enqueue(path, until.Ticks);
+            }
+            catch { }
+        }
+
+        private void CleanupCooldown()
+        {
+            try
+            {
+                var nowTicks = DateTime.UtcNow.Ticks;
+                while (_cooldownQueue.TryPeek(out var path, out var ticks) && ticks <= nowTicks)
+                {
+                    _cooldownQueue.Dequeue();
+                    if (_cooldown.TryGetValue(path, out var dt) && dt.Ticks <= nowTicks)
+                    {
+                        _cooldown.Remove(path);
+                    }
+                }
+            }
+            catch { }
         }
 
         private async Task ChooseAndApplyFolderAsync()
@@ -661,7 +844,26 @@ namespace SimpleImageSlideShow.Components.Pages
                     _resizeObj = await JS.InvokeAsync<IJSObjectReference>("window.app.addResizeListener", _selfRef);
                 }
                 catch { }
+
+                // 初回はディレイ無視で1枚挿入（グリッド初期化を待つ）
+                await WaitForGridReadyAsync(TimeSpan.FromMilliseconds(800));
+                try
+                {
+                    await StepAsync();
+                    StateHasChanged();
+                }
+                catch { }
+
                 await StartAsync();
+            }
+        }
+
+        private async Task WaitForGridReadyAsync(TimeSpan timeout)
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            while ((Occupied is null || Cols <= 0 || Rows <= 0) && sw.Elapsed < timeout)
+            {
+                await Task.Delay(20);
             }
         }
 

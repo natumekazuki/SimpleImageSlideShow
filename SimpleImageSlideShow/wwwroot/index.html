@@ -28,13 +28,34 @@
       (function(){
         var timer;
         var delay = 2000;
-        function showCursor(){ document.body.classList.remove('hide-cursor'); }
+        var styleEl;
+        var cursorHidden = false;
+        function ensureStyle(){
+          if(!styleEl){
+            styleEl = document.createElement('style');
+            styleEl.id = 'cursor-hide-style';
+            styleEl.textContent = 'body.hide-cursor, body.hide-cursor * { cursor: none !important; }';
+            document.head.appendChild(styleEl);
+          }
+        }
+        function showCursor(){
+          document.body.classList.remove('hide-cursor');
+          if(cursorHidden){
+            try { document.body.style.removeProperty('cursor'); } catch {}
+            cursorHidden = false;
+          }
+        }
         function scheduleHide(){
           clearTimeout(timer);
           showCursor();
-          timer = setTimeout(function(){ document.body.classList.add('hide-cursor'); }, delay);
+          ensureStyle();
+          timer = setTimeout(function(){
+            document.body.classList.add('hide-cursor');
+            try { document.body.style.setProperty('cursor', 'none', 'important'); } catch {}
+            cursorHidden = true;
+          }, delay);
         }
-        ['mousemove','mousedown','mouseenter','touchstart','wheel','pointermove'].forEach(function(ev){
+        ['mousemove','mousedown','mouseenter','touchstart','wheel','pointermove','keydown','contextmenu'].forEach(function(ev){
           window.addEventListener(ev, scheduleHide, { passive: true });
         });
         scheduleHide();
