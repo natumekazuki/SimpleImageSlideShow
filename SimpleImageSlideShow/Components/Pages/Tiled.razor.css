@@ -40,3 +40,33 @@
     from { opacity: 1; }
     to { opacity: 0; }
 }
+
+/* Clock overlay (bottom-left fixed) */
+.clock-overlay {
+    position: absolute;
+    left: 12px;
+    bottom: 12px;
+    width: 320px;   /* Keep in sync with code-side reserved area */
+    height: 140px;  /* Keep in sync with code-side reserved area */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    color: #000;
+    user-select: none;
+    pointer-events: none; /* Do not block interactions */
+    z-index: 2; /* Above tiles */
+}
+
+.clock-overlay.bright { opacity: 0.95; }
+.clock-overlay.dim { opacity: 0.55; }
+
+.clock-time {
+    font-size: 80px;
+    line-height: 1.0;
+}
+
+.clock-date {
+    font-size: 24px;
+    line-height: 1.2;
+}
