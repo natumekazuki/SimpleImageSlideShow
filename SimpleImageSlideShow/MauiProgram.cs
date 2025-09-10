@@ -1,5 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
-using SimpleImageSlideShow.Platforms.Windows;
+﻿using SimpleImageSlideShow.Platforms.Windows;
 using SimpleImageSlideShow.Services;
 
 namespace SimpleImageSlideShow

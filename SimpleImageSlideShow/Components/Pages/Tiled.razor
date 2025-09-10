@@ -45,4 +45,9 @@
             <img src="@item.Src" alt="img" style="@imgStyle" />
         </div>
     }
+
+    <div id="clock-overlay" class="clock-overlay @(ClockOverlapped ? "dim" : "bright")">
+        <div class="clock-time">@ClockTime</div>
+        <div class="clock-date">@ClockDate</div>
+    </div>
 </div>

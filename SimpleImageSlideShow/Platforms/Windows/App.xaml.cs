@@ -1,8 +1,6 @@
 ﻿using Microsoft.Maui.Handlers;
 using Microsoft.Maui.Platform;
 using Microsoft.UI.Windowing;
-using Windows.Graphics;
-using System.Threading;
 
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
@@ -50,7 +48,7 @@ namespace SimpleImageSlideShow.WinUI
                         if (tb is not null)
                         {
                             var bg = Windows.UI.Color.FromArgb(255, 0xD3, 0xD3, 0xD3); // #D3D3D3 lightgray
-                            var fg = Windows.UI.Color.FromArgb(255, 0, 0, 0);
+                            var fg = Windows.UI.Color.FromArgb(255, 0xD3, 0xD3, 0xD3);
                             tb.BackgroundColor = bg;
                             tb.InactiveBackgroundColor = bg;
                             tb.ButtonBackgroundColor = bg;
@@ -76,7 +74,7 @@ namespace SimpleImageSlideShow.WinUI
                                 if (tb is not null)
                                 {
                                     var bg = Windows.UI.Color.FromArgb(255, 0xD3, 0xD3, 0xD3);
-                                    var fg = Windows.UI.Color.FromArgb(255, 0, 0, 0);
+                                    var fg = Windows.UI.Color.FromArgb(255, 0xD3, 0xD3, 0xD3);
                                     tb.BackgroundColor = bg;
                                     tb.InactiveBackgroundColor = bg;
                                     tb.ButtonBackgroundColor = bg;

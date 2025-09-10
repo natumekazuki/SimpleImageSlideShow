@@ -2,18 +2,30 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using SimpleImageSlideShow.Models;
 using SimpleImageSlideShow.Services;
+using System.Globalization;
 using Windows.Storage.Pickers;
 
 namespace SimpleImageSlideShow.Components.Pages
 {
     public sealed partial class Tiled : IAsyncDisposable
     {
-        [Inject] public required IImageService ImageService { get; init; }
-        [Inject] public required ISettingsService SettingsService { get; init; }
-        [Inject] public required IWindowService WindowService { get; init; }
-        [Inject] public required IWebViewHostService WebViewHost { get; init; }
-        [Inject] public required NavigationManager Nav { get; init; }
-        [Inject] public required IJSRuntime JS { get; init; }
+        [Inject]
+        public required IImageService ImageService { get; init; }
+
+        [Inject]
+        public required ISettingsService SettingsService { get; init; }
+
+        [Inject]
+        public required IWindowService WindowService { get; init; }
+
+        [Inject]
+        public required IWebViewHostService WebViewHost { get; init; }
+
+        [Inject]
+        public required NavigationManager Nav { get; init; }
+
+        [Inject]
+        public required IJSRuntime JS { get; init; }
 
         private ElementReference ContainerRef;
 
@@ -63,6 +75,17 @@ namespace SimpleImageSlideShow.Components.Pages
         private bool[,]? Occupied;
         private TiledItem?[,]? Owners;
 
+        // Clock overlay (reserved area in grid)
+        private const double ClockReservedWidth = 320;   // px (keep in sync with CSS)
+        private const double ClockReservedHeight = 140;  // px (keep in sync with CSS)
+        private const double ClockMarginLeft = 12;       // px
+        private const double ClockMarginBottom = 12;     // px
+        private bool[,]? ClockCells;
+        private bool ClockOverlapped = false;
+        private string ClockTime = "--:--";
+        private string ClockDate = "--/--(-)";
+        private Timer? _clockTimer;
+
         private CancellationTokenSource? _cts;
         private Task? _loopTask;
         private IJSObjectReference? _resizeObj;
@@ -109,6 +132,23 @@ namespace SimpleImageSlideShow.Components.Pages
             {
                 await ChooseAndApplyFolderAsync();
             }
+
+            // Initialize clock text and periodic update
+            UpdateClockText();
+            try
+            {
+                var due = TimeSpan.FromSeconds(Math.Max(1, 60 - DateTime.Now.Second));
+                _clockTimer = new Timer(_ =>
+                {
+                    try
+                    {
+                        UpdateClockText();
+                        _ = InvokeAsync(StateHasChanged);
+                    }
+                    catch { }
+                }, null, due, TimeSpan.FromSeconds(30));
+            }
+            catch { }
         }
 
         [JSInvokable]
@@ -140,14 +180,14 @@ namespace SimpleImageSlideShow.Components.Pages
 
             Occupied = new bool[Rows, Cols];
             Owners = new TiledItem?[Rows, Cols];
+            ComputeClockReservedCells();
+            UpdateClockOverlap();
             // reset items on recompute asリセットでOKの仕様
             Items.Clear();
             UsedPaths.Clear();
         }
 
-        private bool _primed = false;
-
-        private async Task PrimeInitialAsync()
+        private static async Task PrimeInitialAsync()
         {
             // Initial prime disabled to avoid burst loads and duplicates
             await Task.CompletedTask;
@@ -227,7 +267,9 @@ namespace SimpleImageSlideShow.Components.Pages
             var baseFit = GetBaseFitScale(entity);
             var rand = Random.Shared.NextDouble() * (1.0 - MinScale) + MinScale; // [MinScale,1]
             var scale = baseFit * rand;
-            if (!TryPlaceScaled(entity, baseFit, ref rand, out var item))
+            // Strict: only place avoiding clock area in this phase.
+            // If it doesn't fit, return false so removal phase can try.
+            if (!TryPlaceScaled(entity, baseFit, ref rand, out var item, avoidClock: true))
             {
                 return false;
             }
@@ -264,8 +306,8 @@ namespace SimpleImageSlideShow.Components.Pages
                 // if cannot fit even on an empty grid, skip this image
                 if (reqCols > Cols || reqRows > Rows) continue;
 
-                // try without removal first
-                if (TryPlace(reqRows, reqCols, out var r0, out var c0))
+                // try without removal first (avoid clock area)
+                if (TryPlace(reqRows, reqCols, out var r0, out var c0, avoidClock: true))
                 {
                     var item0 = new TiledItem
                     {
@@ -291,11 +333,15 @@ namespace SimpleImageSlideShow.Components.Pages
                     return;
                 }
 
-                // simulate FIFO removals on a copy of the occupancy grid to find minimal removals
-                if (!TryComputeFifoRemovalForPlacement(reqRows, reqCols, out int removeCount, out int rr, out int cc))
+                // simulate FIFO removals on a copy of the occupancy grid to find minimal removals (avoid clock area)
+                if (!TryComputeFifoRemovalForPlacement(reqRows, reqCols, out int removeCount, out int rr, out int cc, avoidClock: true))
                 {
-                    // couldn't compute (should be rare), try another image
-                    continue;
+                    // try again allowing clock area as last resort
+                    if (!TryComputeFifoRemovalForPlacement(reqRows, reqCols, out removeCount, out rr, out cc, avoidClock: false))
+                    {
+                        // couldn't compute (should be rare), try another image
+                        continue;
+                    }
                 }
 
                 // perform a single batch removal animation for the first removeCount items
@@ -346,7 +392,7 @@ namespace SimpleImageSlideShow.Components.Pages
             }
         }
 
-        private bool TryComputeFifoRemovalForPlacement(int reqRows, int reqCols, out int removeCount, out int row, out int col)
+        private bool TryComputeFifoRemovalForPlacement(int reqRows, int reqCols, out int removeCount, out int row, out int col, bool avoidClock)
         {
             removeCount = 0; row = col = -1;
             if (Occupied is null) return false;
@@ -358,7 +404,7 @@ namespace SimpleImageSlideShow.Components.Pages
                     occSim[r, c] = Occupied[r, c];
 
             // quick success without removals
-            if (TryPlaceSim(reqRows, reqCols, occSim, out row, out col))
+            if (TryPlaceSim(reqRows, reqCols, occSim, out row, out col, avoidClock))
             {
                 removeCount = 0;
                 return true;
@@ -369,7 +415,7 @@ namespace SimpleImageSlideShow.Components.Pages
             {
                 var it = Items[k - 1];
                 FillCellsSim(it.Row, it.Col, it.RowSpan, it.ColSpan, occSim, false);
-                if (TryPlaceSim(reqRows, reqCols, occSim, out row, out col))
+                if (TryPlaceSim(reqRows, reqCols, occSim, out row, out col, avoidClock))
                 {
                     removeCount = k;
                     return true;
@@ -379,7 +425,7 @@ namespace SimpleImageSlideShow.Components.Pages
             return false;
         }
 
-        private static bool TryPlaceSim(int rowSpan, int colSpan, bool[,] occ, out int row, out int col)
+        private bool TryPlaceSim(int rowSpan, int colSpan, bool[,] occ, out int row, out int col, bool avoidClock)
         {
             row = col = -1;
             int rows = occ.GetLength(0);
@@ -391,7 +437,7 @@ namespace SimpleImageSlideShow.Components.Pages
                     bool ok = true;
                     for (int rr = r; rr < r + rowSpan && ok; rr++)
                         for (int cc = c; cc < c + colSpan; cc++)
-                            if (occ[rr, cc]) { ok = false; break; }
+                            if (occ[rr, cc] || (avoidClock && IsClockCell(rr, cc))) { ok = false; break; }
                     if (ok) { row = r; col = c; return true; }
                 }
             }
@@ -407,7 +453,7 @@ namespace SimpleImageSlideShow.Components.Pages
                     occ[r, c] = value;
         }
 
-        private bool TryPlaceScaled(IImageEntity entity, double baseFit, ref double randScale, out TiledItem item)
+        private bool TryPlaceScaled(IImageEntity entity, double baseFit, ref double randScale, out TiledItem item, bool avoidClock)
         {
             item = default!;
             var attempts = 6;
@@ -428,7 +474,7 @@ namespace SimpleImageSlideShow.Components.Pages
                 {
                     for (int cs = reqCols; cs <= maxCols; cs++)
                     {
-                        if (TryPlace(rs, cs, out var r, out var c))
+                        if (TryPlace(rs, cs, out var r, out var c, avoidClock))
                         {
                             item = new TiledItem
                             {
@@ -483,7 +529,7 @@ namespace SimpleImageSlideShow.Components.Pages
                     continue;
                 }
 
-                if (TryPlace(reqRows, reqCols, out var rFree, out var cFree))
+                if (TryPlace(reqRows, reqCols, out var rFree, out var cFree, avoidClock: true))
                 {
                     var itemFree = new TiledItem
                     {
@@ -574,7 +620,7 @@ namespace SimpleImageSlideShow.Components.Pages
         private bool FindBestRectToClear(int reqRows, int reqCols, out int bestR, out int bestC, out List<TiledItem> toRemove)
         {
             bestR = bestC = -1;
-            toRemove = new List<TiledItem>();
+            toRemove = [];
             int bestCount = int.MaxValue;
             int totalPositions = Math.Max(1, (Rows - reqRows + 1) * (Cols - reqCols + 1));
             int budget = GetProbeLimit(totalPositions);
@@ -587,6 +633,7 @@ namespace SimpleImageSlideShow.Components.Pages
                 {
                     for (int c = 0; c <= Cols - reqCols; c++)
                     {
+                        if (IsOverlappingClock(r, c, reqRows, reqCols)) continue;
                         var overlaps = GetOverlaps(r, c, reqRows, reqCols);
                         int count = overlaps.Count;
                         if (count < bestCount)
@@ -609,6 +656,7 @@ namespace SimpleImageSlideShow.Components.Pages
                     do { idx = Random.Shared.Next(totalPositions); } while (!sampled.Add(idx));
                     int r = idx / Math.Max(1, (Cols - reqCols + 1));
                     int c = idx % Math.Max(1, (Cols - reqCols + 1));
+                    if (IsOverlappingClock(r, c, reqRows, reqCols)) continue;
                     var overlaps = GetOverlaps(r, c, reqRows, reqCols);
                     int count = overlaps.Count;
                     if (count < bestCount)
@@ -635,7 +683,7 @@ namespace SimpleImageSlideShow.Components.Pages
         private List<TiledItem> GetOverlaps(int row, int col, int rowSpan, int colSpan)
         {
             var set = new HashSet<TiledItem>();
-            if (Owners is null) return new List<TiledItem>();
+            if (Owners is null) return [];
             for (int r = row; r < row + rowSpan; r++)
             {
                 for (int c = col; c < col + colSpan; c++)
@@ -644,10 +692,10 @@ namespace SimpleImageSlideShow.Components.Pages
                     if (it is not null) set.Add(it);
                 }
             }
-            return set.ToList();
+            return [.. set];
         }
 
-        private bool TryPlace(int rowSpan, int colSpan, out int row, out int col)
+        private bool TryPlace(int rowSpan, int colSpan, out int row, out int col, bool avoidClock)
         {
             row = col = 0;
             if (Occupied is null) return false;
@@ -656,7 +704,7 @@ namespace SimpleImageSlideShow.Components.Pages
             {
                 for (int c = 0; c <= Cols - colSpan; c++)
                 {
-                    if (CanPlace(r, c, rowSpan, colSpan)) candidates.Add((r, c));
+                    if (CanPlace(r, c, rowSpan, colSpan, avoidClock)) candidates.Add((r, c));
                 }
             }
             if (candidates.Count == 0) return false;
@@ -664,7 +712,7 @@ namespace SimpleImageSlideShow.Components.Pages
             row = pick.r; col = pick.c; return true;
         }
 
-        private bool CanPlace(int row, int col, int rowSpan, int colSpan)
+        private bool CanPlace(int row, int col, int rowSpan, int colSpan, bool avoidClock)
         {
             if (Occupied is null) return false;
             for (int r = row; r < row + rowSpan; r++)
@@ -673,6 +721,7 @@ namespace SimpleImageSlideShow.Components.Pages
                 {
                     if (r < 0 || r >= Rows || c < 0 || c >= Cols) return false;
                     if (Occupied[r, c]) return false;
+                    if (avoidClock && IsClockCell(r, c)) return false;
                 }
             }
             return true;
@@ -688,6 +737,7 @@ namespace SimpleImageSlideShow.Components.Pages
                     Occupied[r, c] = value;
                 }
             }
+            UpdateClockOverlap();
         }
 
         private async Task<string> GetRandomUnusedPathAsync()
@@ -872,6 +922,7 @@ namespace SimpleImageSlideShow.Components.Pages
             await StopAsync();
             try { if (_resizeObj is not null) await _resizeObj.InvokeVoidAsync("dispose"); } catch { }
             try { _selfRef?.Dispose(); } catch { }
+            try { _clockTimer?.Dispose(); } catch { }
             ImageService.Dispose();
         }
 
@@ -887,6 +938,74 @@ namespace SimpleImageSlideShow.Components.Pages
             if (string.IsNullOrWhiteSpace(DirectoryPath)) return string.Empty;
             string rel = Path.GetRelativePath(DirectoryPath, absolutePath).Replace('\\', '/');
             return $"https://{HostName}/{rel}";
+        }
+
+        private void UpdateClockText()
+        {
+            var now = DateTime.Now;
+            ClockTime = now.ToString("HH:mm");
+            var ja = CultureInfo.GetCultureInfo("ja-JP");
+            var dow = now.ToString("ddd", ja);
+            ClockDate = $"{now:MM/dd}({dow})";
+        }
+
+        private void ComputeClockReservedCells()
+        {
+            if (Rows <= 0 || Cols <= 0)
+            {
+                ClockCells = null; return;
+            }
+            ClockCells = new bool[Rows, Cols];
+
+            // Clock rectangle in viewport px
+            double cx1 = ClockMarginLeft;
+            double cy2 = ViewportH - ClockMarginBottom;
+            double cx2 = cx1 + ClockReservedWidth;
+            double cy1 = cy2 - ClockReservedHeight;
+
+            // Grid rectangle
+            double gx1 = OffsetX;
+            double gy1 = OffsetY;
+            double gx2 = OffsetX + GridW;
+            double gy2 = OffsetY + GridH;
+
+            // Intersection
+            double ix1 = Math.Max(cx1, gx1);
+            double iy1 = Math.Max(cy1, gy1);
+            double ix2 = Math.Min(cx2, gx2);
+            double iy2 = Math.Min(cy2, gy2);
+            if (ix2 <= ix1 || iy2 <= iy1) return; // no overlap
+
+            int cStart = Math.Clamp((int)Math.Floor((ix1 - gx1) / Math.Max(1.0, TileW)), 0, Cols);
+            int cEndEx = Math.Clamp((int)Math.Ceiling((ix2 - gx1) / Math.Max(1.0, TileW)), 0, Cols);
+            int rStart = Math.Clamp((int)Math.Floor((iy1 - gy1) / Math.Max(1.0, TileH)), 0, Rows);
+            int rEndEx = Math.Clamp((int)Math.Ceiling((iy2 - gy1) / Math.Max(1.0, TileH)), 0, Rows);
+
+            for (int r = rStart; r < rEndEx; r++)
+                for (int c = cStart; c < cEndEx; c++)
+                    ClockCells[r, c] = true;
+        }
+
+        private bool IsClockCell(int r, int c)
+            => ClockCells is not null && r >= 0 && r < Rows && c >= 0 && c < Cols && ClockCells[r, c];
+
+        private bool IsOverlappingClock(int row, int col, int rowSpan, int colSpan)
+        {
+            if (ClockCells is null) return false;
+            for (int r = row; r < row + rowSpan; r++)
+                for (int c = col; c < col + colSpan; c++)
+                    if (IsClockCell(r, c)) return true;
+            return false;
+        }
+
+        private void UpdateClockOverlap()
+        {
+            if (Occupied is null || ClockCells is null) { ClockOverlapped = false; return; }
+            bool any = false;
+            for (int r = 0; r < Rows && !any; r++)
+                for (int c = 0; c < Cols && !any; c++)
+                    if (ClockCells[r, c] && Occupied[r, c]) any = true;
+            ClockOverlapped = any;
         }
     }
 }
