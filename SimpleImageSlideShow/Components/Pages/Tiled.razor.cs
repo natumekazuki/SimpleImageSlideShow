@@ -53,6 +53,7 @@ namespace SimpleImageSlideShow.Components.Pages
 
         private uint DelaySeconds { get; set; } = 5;
         private double MinScale { get; set; } = 0.5;
+        private double MaxScale { get; set; } = 1.0;
         private string? DirectoryPath { get; set; }
         private string HostName => WebViewHost.HostName;
         private int MinTilePx = 128; // 最小タイル幅（px）
@@ -134,6 +135,8 @@ namespace SimpleImageSlideShow.Components.Pages
             var settings = await SettingsService.LoadAsync();
             DelaySeconds = settings.DelaySeconds > 0 ? settings.DelaySeconds : 5;
             MinScale = Math.Clamp(settings.TiledMinScale, 0.1, 1.0);
+            MaxScale = Math.Clamp(settings.TiledMaxScale, 0.1, 1.0);
+            if (MaxScale < MinScale) MaxScale = MinScale;
             DirectoryPath = settings.DirectoryPath;
             TiledCols = settings.TiledCols > 0 ? settings.TiledCols : 6;
             MinTilePx = settings.MinTilePx > 0 ? settings.MinTilePx : 128;
@@ -287,7 +290,9 @@ namespace SimpleImageSlideShow.Components.Pages
             var (origW, origH) = size.Value;
 
             var baseFit = GetBaseFitScaleFromDims(origW, origH);
-            var rand = Random.Shared.NextDouble() * (1.0 - MinScale) + MinScale; // [MinScale,1]
+            var hi = Math.Max(MinScale, Math.Min(1.0, MaxScale));
+            var lo = Math.Min(MinScale, hi);
+            var rand = lo + Random.Shared.NextDouble() * Math.Max(0.0, hi - lo);
             var scale = baseFit * rand;
             // Strict: only place avoiding clock area in this phase.
             // If it doesn't fit, return false so removal phase can try.
@@ -319,7 +324,9 @@ namespace SimpleImageSlideShow.Components.Pages
 
                 // choose initial scale once and do NOT degrade it
                 var baseFit = GetBaseFitScaleFromDims(origW, origH);
-                var rand = Random.Shared.NextDouble() * (1.0 - MinScale) + MinScale; // [MinScale,1]
+                var hi = Math.Max(MinScale, Math.Min(1.0, MaxScale));
+                var lo = Math.Min(MinScale, hi);
+                var rand = lo + Random.Shared.NextDouble() * Math.Max(0.0, hi - lo);
                 var scale = baseFit * rand;
                 var sw = origW * scale;
                 var sh = origH * scale;
@@ -540,7 +547,9 @@ namespace SimpleImageSlideShow.Components.Pages
 
                 // choose scale in [MinScale,1]
                 var baseFit = GetBaseFitScaleFromDims(origW, origH);
-                var rand = Random.Shared.NextDouble() * (1.0 - MinScale) + MinScale;
+                var hi = Math.Max(MinScale, Math.Min(1.0, MaxScale));
+                var lo = Math.Min(MinScale, hi);
+                var rand = lo + Random.Shared.NextDouble() * Math.Max(0.0, hi - lo);
                 var scale = baseFit * rand;
                 var sw = origW * scale;
                 var sh = origH * scale;
@@ -809,11 +818,21 @@ namespace SimpleImageSlideShow.Components.Pages
 
         // Fill target control removed: always aim to fully occupy the grid
 
-        private void OnScaleInput(ChangeEventArgs e)
+        private void OnMinScaleInput(ChangeEventArgs e)
         {
             if (e.Value is string s && int.TryParse(s, out var v))
             {
                 MinScale = Math.Clamp(v / 100.0, 0.1, 1.0);
+                if (MaxScale < MinScale) MaxScale = MinScale;
+            }
+        }
+
+        private void OnMaxScaleInput(ChangeEventArgs e)
+        {
+            if (e.Value is string s && int.TryParse(s, out var v))
+            {
+                MaxScale = Math.Clamp(v / 100.0, 0.1, 1.0);
+                if (MaxScale < MinScale) MinScale = MaxScale;
             }
         }
 
@@ -843,6 +862,7 @@ namespace SimpleImageSlideShow.Components.Pages
             settings.DelaySeconds = DelaySeconds;
             // Fill target is implicit (100%); not persisted anymore
             settings.TiledMinScale = MinScale;
+            settings.TiledMaxScale = MaxScale;
             settings.DirectoryPath = DirectoryPath;
             settings.LastMode = "Tiled";
             settings.TiledCols = TiledCols;
@@ -1057,7 +1077,9 @@ namespace SimpleImageSlideShow.Components.Pages
                 var (origW, origH) = size.Value;
 
                 var baseFit = GetBaseFitScaleFromDims(origW, origH);
-                var rand = Random.Shared.NextDouble() * (1.0 - MinScale) + MinScale;
+                var hi = Math.Max(MinScale, Math.Min(1.0, MaxScale));
+                var lo = Math.Min(MinScale, hi);
+                var rand = lo + Random.Shared.NextDouble() * Math.Max(0.0, hi - lo);
                 var scale = baseFit * rand;
                 var sw = origW * scale;
                 var sh = origH * scale;
