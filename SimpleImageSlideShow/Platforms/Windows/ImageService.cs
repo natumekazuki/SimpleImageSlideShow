@@ -57,6 +57,23 @@ namespace SimpleImageSlideShow.Platforms.Windows
             }
         }
 
+        async Task<(double Width, double Height)?> IImageService.GetImageSizeAsync(string imagePath)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(imagePath) || !File.Exists(imagePath))
+                {
+                    return await Task.FromResult<(double, double)?>(null);
+                }
+                using var img = System.Drawing.Image.FromFile(imagePath);
+                return await Task.FromResult<(double, double)?>((img.Width, img.Height));
+            }
+            catch
+            {
+                return await Task.FromResult<(double, double)?>(null);
+            }
+        }
+
         IEnumerable<string> IImageService.LoadImages(string directoryPath)
         {
             if(string.IsNullOrWhiteSpace(directoryPath)) return this.AllImages;

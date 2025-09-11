@@ -93,6 +93,24 @@ namespace SimpleImageSlideShow.Components.Pages
         private readonly Dictionary<string, string> _dataUrlCache = new(StringComparer.OrdinalIgnoreCase);
         private readonly LinkedList<string> _dataUrlLru = new();
         private const int DataUrlCacheCapacity = 256;
+        private const int PlanCapacity = 5; // plan up to 5 steps ahead
+
+        // Precomputed next step to reduce stutter on tick
+        private record PlannedStep
+        {
+            public required string Path { get; init; }
+            public required int Row { get; init; }
+            public required int Col { get; init; }
+            public required int RowSpan { get; init; }
+            public required int ColSpan { get; init; }
+            public required double Scale { get; init; }
+            public required double ImgWidth { get; init; }
+            public required double ImgHeight { get; init; }
+            public required string Src { get; init; }
+            public int RemoveCount { get; init; }
+        }
+
+        private readonly List<PlannedStep> _planQueue = new();
 
         // Reuse TTL: avoid reusing the same image too soon
         private readonly Dictionary<string, DateTime> _cooldown = new(StringComparer.OrdinalIgnoreCase);
@@ -185,6 +203,7 @@ namespace SimpleImageSlideShow.Components.Pages
             // reset items on recompute asリセットでOKの仕様
             Items.Clear();
             UsedPaths.Clear();
+            InvalidatePlan();
         }
 
         private static async Task PrimeInitialAsync()
@@ -209,7 +228,7 @@ namespace SimpleImageSlideShow.Components.Pages
                     {
                         await InvokeAsync(async () =>
                         {
-                            await StepAsync();
+                            await ApplyPlannedOrStepAsync();
                             StateHasChanged();
                         });
                     }
@@ -253,6 +272,8 @@ namespace SimpleImageSlideShow.Components.Pages
             {
                 await AddWithFifoRemovalAsync();
             }
+            // Fill plan buffer
+            try { await EnsurePlanAsync(); } catch { }
         }
 
         // Replace phase now uses FIFO-based removal strategy
@@ -261,15 +282,16 @@ namespace SimpleImageSlideShow.Components.Pages
         {
             var imagePath = await GetRandomUnusedPathAsync();
             if (string.IsNullOrWhiteSpace(imagePath)) return false;
-            var entity = await ImageService.LoadImageEntityAsync(imagePath);
-            if (entity is null) return false;
+            var size = await ImageService.GetImageSizeAsync(imagePath);
+            if (size is null) return false;
+            var (origW, origH) = size.Value;
 
-            var baseFit = GetBaseFitScale(entity);
+            var baseFit = GetBaseFitScaleFromDims(origW, origH);
             var rand = Random.Shared.NextDouble() * (1.0 - MinScale) + MinScale; // [MinScale,1]
             var scale = baseFit * rand;
             // Strict: only place avoiding clock area in this phase.
             // If it doesn't fit, return false so removal phase can try.
-            if (!TryPlaceScaled(entity, baseFit, ref rand, out var item, avoidClock: true))
+            if (!TryPlaceScaled(origW, origH, imagePath, baseFit, ref rand, out var item, avoidClock: true))
             {
                 return false;
             }
@@ -277,8 +299,8 @@ namespace SimpleImageSlideShow.Components.Pages
             FillCells(item.Row, item.Col, item.RowSpan, item.ColSpan, true);
             SetOwners(item, true);
             Items.Add(item);
-            UsedPaths.Add(entity.FilePath);
-            AddCooldown(entity.FilePath);
+            UsedPaths.Add(imagePath);
+            AddCooldown(imagePath);
             return true;
         }
 
@@ -291,15 +313,16 @@ namespace SimpleImageSlideShow.Components.Pages
             {
                 var imagePath = await GetRandomUnusedPathAsync();
                 if (string.IsNullOrWhiteSpace(imagePath)) return;
-                var entity = await ImageService.LoadImageEntityAsync(imagePath);
-                if (entity is null) continue;
+                var size = await ImageService.GetImageSizeAsync(imagePath);
+                if (size is null) continue;
+                var (origW, origH) = size.Value;
 
                 // choose initial scale once and do NOT degrade it
-                var baseFit = GetBaseFitScale(entity);
+                var baseFit = GetBaseFitScaleFromDims(origW, origH);
                 var rand = Random.Shared.NextDouble() * (1.0 - MinScale) + MinScale; // [MinScale,1]
                 var scale = baseFit * rand;
-                var sw = entity.Width * scale;
-                var sh = entity.Height * scale;
+                var sw = origW * scale;
+                var sh = origH * scale;
                 int reqCols = Math.Max(1, (int)Math.Ceiling(sw / TileW));
                 int reqRows = Math.Max(1, (int)Math.Ceiling(sh / TileH));
 
@@ -311,7 +334,7 @@ namespace SimpleImageSlideShow.Components.Pages
                 {
                     var item0 = new TiledItem
                     {
-                        Path = entity.FilePath,
+                        Path = imagePath,
                         Row = r0,
                         Col = c0,
                         RowSpan = reqRows,
@@ -323,13 +346,13 @@ namespace SimpleImageSlideShow.Components.Pages
                         Scale = scale,
                         ImgWidth = sw,
                         ImgHeight = sh,
-                        Src = BuildVirtualHostUrl(entity.FilePath)
+                        Src = BuildVirtualHostUrl(imagePath)
                     };
                     FillCells(item0.Row, item0.Col, item0.RowSpan, item0.ColSpan, true);
                     SetOwners(item0, true);
                     Items.Add(item0);
-                    UsedPaths.Add(entity.FilePath);
-                    AddCooldown(entity.FilePath);
+                    UsedPaths.Add(imagePath);
+                    AddCooldown(imagePath);
                     return;
                 }
 
@@ -369,7 +392,7 @@ namespace SimpleImageSlideShow.Components.Pages
                 // place new item at the precomputed location
                 var item = new TiledItem
                 {
-                    Path = entity.FilePath,
+                    Path = imagePath,
                     Row = rr,
                     Col = cc,
                     RowSpan = reqRows,
@@ -381,13 +404,13 @@ namespace SimpleImageSlideShow.Components.Pages
                     Scale = scale,
                     ImgWidth = sw,
                     ImgHeight = sh,
-                    Src = BuildVirtualHostUrl(entity.FilePath)
+                    Src = BuildVirtualHostUrl(imagePath)
                 };
                 FillCells(item.Row, item.Col, item.RowSpan, item.ColSpan, true);
                 SetOwners(item, true);
                 Items.Add(item);
-                UsedPaths.Add(entity.FilePath);
-                AddCooldown(entity.FilePath);
+                UsedPaths.Add(imagePath);
+                AddCooldown(imagePath);
                 return;
             }
         }
@@ -453,7 +476,7 @@ namespace SimpleImageSlideShow.Components.Pages
                     occ[r, c] = value;
         }
 
-        private bool TryPlaceScaled(IImageEntity entity, double baseFit, ref double randScale, out TiledItem item, bool avoidClock)
+        private bool TryPlaceScaled(double origW, double origH, string filePath, double baseFit, ref double randScale, out TiledItem item, bool avoidClock)
         {
             item = default!;
             var attempts = 6;
@@ -461,8 +484,8 @@ namespace SimpleImageSlideShow.Components.Pages
             {
                 if (randScale < MinScale) randScale = MinScale;
                 var scale = baseFit * randScale;
-                var sw = entity.Width * scale;
-                var sh = entity.Height * scale;
+                var sw = origW * scale;
+                var sh = origH * scale;
 
                 int reqCols = Math.Max(1, (int)Math.Ceiling(sw / TileW));
                 int reqRows = Math.Max(1, (int)Math.Ceiling(sh / TileH));
@@ -478,7 +501,7 @@ namespace SimpleImageSlideShow.Components.Pages
                         {
                             item = new TiledItem
                             {
-                                Path = entity.FilePath,
+                                Path = filePath,
                                 Row = r,
                                 Col = c,
                                 RowSpan = rs,
@@ -490,7 +513,7 @@ namespace SimpleImageSlideShow.Components.Pages
                                 Scale = scale,
                                 ImgWidth = sw,
                                 ImgHeight = sh,
-                                Src = BuildVirtualHostUrl(entity.FilePath)
+                                Src = BuildVirtualHostUrl(filePath)
                             };
                             return true;
                         }
@@ -511,15 +534,16 @@ namespace SimpleImageSlideShow.Components.Pages
             {
                 var imagePath = await GetRandomUnusedPathAsync();
                 if (string.IsNullOrWhiteSpace(imagePath)) return;
-                var entity = await ImageService.LoadImageEntityAsync(imagePath);
-                if (entity is null) continue;
+                var size = await ImageService.GetImageSizeAsync(imagePath);
+                if (size is null) continue;
+                var (origW, origH) = size.Value;
 
                 // choose scale in [MinScale,1]
-                var baseFit = GetBaseFitScale(entity);
+                var baseFit = GetBaseFitScaleFromDims(origW, origH);
                 var rand = Random.Shared.NextDouble() * (1.0 - MinScale) + MinScale;
                 var scale = baseFit * rand;
-                var sw = entity.Width * scale;
-                var sh = entity.Height * scale;
+                var sw = origW * scale;
+                var sh = origH * scale;
                 int reqCols = Math.Max(1, (int)Math.Ceiling(sw / TileW));
                 int reqRows = Math.Max(1, (int)Math.Ceiling(sh / TileH));
 
@@ -533,7 +557,7 @@ namespace SimpleImageSlideShow.Components.Pages
                 {
                     var itemFree = new TiledItem
                     {
-                        Path = entity.FilePath,
+                        Path = imagePath,
                         Row = rFree,
                         Col = cFree,
                         RowSpan = reqRows,
@@ -545,12 +569,12 @@ namespace SimpleImageSlideShow.Components.Pages
                         Scale = scale,
                         ImgWidth = sw,
                         ImgHeight = sh,
-                        Src = BuildVirtualHostUrl(entity.FilePath)
+                        Src = BuildVirtualHostUrl(imagePath)
                     };
                     FillCells(rFree, cFree, reqRows, reqCols, true);
                     SetOwners(itemFree, true);
                     Items.Add(itemFree);
-                    UsedPaths.Add(entity.FilePath);
+                    UsedPaths.Add(imagePath);
                     return;
                 }
 
@@ -573,7 +597,7 @@ namespace SimpleImageSlideShow.Components.Pages
                     }
                     var item = new TiledItem
                     {
-                        Path = entity.FilePath,
+                        Path = imagePath,
                         Row = r,
                         Col = c,
                         RowSpan = reqRows,
@@ -585,12 +609,12 @@ namespace SimpleImageSlideShow.Components.Pages
                         Scale = scale,
                         ImgWidth = sw,
                         ImgHeight = sh,
-                        Src = BuildVirtualHostUrl(entity.FilePath)
+                        Src = BuildVirtualHostUrl(imagePath)
                     };
                     FillCells(r, c, reqRows, reqCols, true);
                     SetOwners(item, true);
                     Items.Add(item);
-                    UsedPaths.Add(entity.FilePath);
+                    UsedPaths.Add(imagePath);
                     return;
                 }
             }
@@ -608,11 +632,11 @@ namespace SimpleImageSlideShow.Components.Pages
             }
         }
 
-        private double GetBaseFitScale(IImageEntity entity)
+        private double GetBaseFitScaleFromDims(double width, double height)
         {
             // If original is larger than grid area, scale down to fit within grid, else 1.0
-            var sx = GridW / Math.Max(1.0, entity.Width);
-            var sy = GridH / Math.Max(1.0, entity.Height);
+            var sx = GridW / Math.Max(1.0, width);
+            var sy = GridH / Math.Max(1.0, height);
             var fit = Math.Min(1.0, Math.Min(sx, sy));
             return double.IsFinite(fit) && fit > 0 ? fit : 1.0;
         }
@@ -827,6 +851,7 @@ namespace SimpleImageSlideShow.Components.Pages
             // keep panel size fixed; stop persisting size
             await SettingsService.SaveAsync(settings);
             await StartAsync();
+            try { await EnsurePlanAsync(); } catch { }
         }
 
         private void AddCooldown(string path)
@@ -871,6 +896,7 @@ namespace SimpleImageSlideShow.Components.Pages
             RecomputeGrid();
             await StartAsync();
             await InvokeAsync(StateHasChanged);
+            try { await EnsurePlanAsync(); } catch { }
         }
 
         private async Task SwitchMode(string mode)
@@ -904,8 +930,238 @@ namespace SimpleImageSlideShow.Components.Pages
                 }
                 catch { }
 
+                try { await EnsurePlanAsync(); } catch { }
                 await StartAsync();
             }
+        }
+
+        private void InvalidatePlan() => _planQueue.Clear();
+
+        private async Task ApplyPlannedOrStepAsync()
+        {
+            if (_planQueue.Count == 0)
+            {
+                await StepAsync();
+                return;
+            }
+
+            var plan = _planQueue[0];
+            _planQueue.RemoveAt(0);
+
+            // Apply removals with fade-out animation
+            int toRemove = Math.Min(plan.RemoveCount, Items.Count);
+            if (toRemove > 0)
+            {
+                for (int i = 0; i < toRemove; i++) Items[i].Removing = true;
+                StateHasChanged();
+                await Task.Delay(300);
+                for (int i = 0; i < toRemove; i++)
+                {
+                    var it = Items[0];
+                    FillCells(it.Row, it.Col, it.RowSpan, it.ColSpan, false);
+                    SetOwners(it, false);
+                    Items.RemoveAt(0);
+                    UsedPaths.Remove(it.Path);
+                }
+            }
+
+            var item = new TiledItem
+            {
+                Path = plan.Path,
+                Row = plan.Row,
+                Col = plan.Col,
+                RowSpan = plan.RowSpan,
+                ColSpan = plan.ColSpan,
+                Left = OffsetX + plan.Col * TileW,
+                Top = OffsetY + plan.Row * TileH,
+                Width = plan.ColSpan * TileW,
+                Height = plan.RowSpan * TileH,
+                Scale = plan.Scale,
+                ImgWidth = plan.ImgWidth,
+                ImgHeight = plan.ImgHeight,
+                Src = plan.Src
+            };
+            FillCells(item.Row, item.Col, item.RowSpan, item.ColSpan, true);
+            SetOwners(item, true);
+            Items.Add(item);
+            UsedPaths.Add(plan.Path);
+            AddCooldown(plan.Path);
+
+            try { await EnsurePlanAsync(); } catch { }
+        }
+
+        private record SimItem(string Path, int Row, int Col, int RowSpan, int ColSpan);
+
+        private async Task EnsurePlanAsync()
+        {
+            if (Occupied is null) { _planQueue.Clear(); return; }
+            // Fill up to capacity
+            int need = PlanCapacity - _planQueue.Count;
+            if (need <= 0) return;
+
+            // Simulation state based on current real state plus existing plan
+            var occSim = (bool[,])Occupied.Clone();
+            var simItems = new List<SimItem>(Items.Select(it => new SimItem(it.Path, it.Row, it.Col, it.RowSpan, it.ColSpan)));
+            var plannedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var ps in _planQueue)
+            {
+                // Apply already planned steps to simulation so we stack further plans correctly
+                // Remove FIFO items as indicated
+                int toRemove = Math.Min(ps.RemoveCount, simItems.Count);
+                for (int i = 0; i < toRemove; i++)
+                {
+                    var it = simItems[0];
+                    FillCellsSim(it.Row, it.Col, it.RowSpan, it.ColSpan, occSim, false);
+                    simItems.RemoveAt(0);
+                }
+                // Add planned item
+                FillCellsSim(ps.Row, ps.Col, ps.RowSpan, ps.ColSpan, occSim, true);
+                simItems.Add(new SimItem(ps.Path, ps.Row, ps.Col, ps.RowSpan, ps.ColSpan));
+                plannedPaths.Add(ps.Path);
+            }
+
+            // Build a used-set for planning (current + screen + planned)
+            var usedForPlan = new HashSet<string>(UsedPaths, StringComparer.OrdinalIgnoreCase);
+            foreach (var it in simItems) usedForPlan.Add(it.Path);
+            foreach (var p in plannedPaths) usedForPlan.Add(p);
+
+            for (int n = 0; n < need; n++)
+            {
+                var plan = await ComputeOnePlanAsync(occSim, simItems, usedForPlan);
+                if (plan is null) break;
+                _planQueue.Add(plan);
+                // Apply to sim
+                int toRemove = Math.Min(plan.RemoveCount, simItems.Count);
+                for (int i = 0; i < toRemove; i++)
+                {
+                    var it = simItems[0];
+                    FillCellsSim(it.Row, it.Col, it.RowSpan, it.ColSpan, occSim, false);
+                    simItems.RemoveAt(0);
+                }
+                FillCellsSim(plan.Row, plan.Col, plan.RowSpan, plan.ColSpan, occSim, true);
+                simItems.Add(new SimItem(plan.Path, plan.Row, plan.Col, plan.RowSpan, plan.ColSpan));
+                usedForPlan.Add(plan.Path);
+                try { await PreloadImageUrlAsync(plan.Src); } catch { }
+            }
+        }
+
+        private async Task<PlannedStep?> ComputeOnePlanAsync(bool[,] occSim, List<SimItem> simItems, HashSet<string> usedForPlan)
+        {
+            const int imageTries = 40;
+            for (int t = 0; t < imageTries; t++)
+            {
+                var imagePath = await GetRandomUnusedPathForPlanAsync(usedForPlan);
+                if (string.IsNullOrWhiteSpace(imagePath)) return null;
+                var size = await ImageService.GetImageSizeAsync(imagePath);
+                if (size is null) continue;
+                var (origW, origH) = size.Value;
+
+                var baseFit = GetBaseFitScaleFromDims(origW, origH);
+                var rand = Random.Shared.NextDouble() * (1.0 - MinScale) + MinScale;
+                var scale = baseFit * rand;
+                var sw = origW * scale;
+                var sh = origH * scale;
+                int reqCols = Math.Max(1, (int)Math.Ceiling(sw / TileW));
+                int reqRows = Math.Max(1, (int)Math.Ceiling(sh / TileH));
+                if (reqCols > Cols || reqRows > Rows) continue;
+
+                if (TryPlaceSim(reqRows, reqCols, occSim, out var r0, out var c0, avoidClock: true))
+                {
+                    return new PlannedStep
+                    {
+                        Path = imagePath,
+                        Row = r0,
+                        Col = c0,
+                        RowSpan = reqRows,
+                        ColSpan = reqCols,
+                        Scale = scale,
+                        ImgWidth = sw,
+                        ImgHeight = sh,
+                        Src = BuildVirtualHostUrl(imagePath),
+                        RemoveCount = 0
+                    };
+                }
+
+                if (!TryComputeFifoRemovalForPlacementSim(reqRows, reqCols, occSim, simItems, out int removeCount, out int rr, out int cc, avoidClock: true))
+                {
+                    if (!TryComputeFifoRemovalForPlacementSim(reqRows, reqCols, occSim, simItems, out removeCount, out rr, out cc, avoidClock: false))
+                    {
+                        continue;
+                    }
+                }
+
+                return new PlannedStep
+                {
+                    Path = imagePath,
+                    Row = rr,
+                    Col = cc,
+                    RowSpan = reqRows,
+                    ColSpan = reqCols,
+                    Scale = scale,
+                    ImgWidth = sw,
+                    ImgHeight = sh,
+                    Src = BuildVirtualHostUrl(imagePath),
+                    RemoveCount = Math.Max(0, removeCount)
+                };
+            }
+            return null;
+        }
+
+        private bool TryComputeFifoRemovalForPlacementSim(int reqRows, int reqCols, bool[,] occ, List<SimItem> simItems, out int removeCount, out int row, out int col, bool avoidClock)
+        {
+            removeCount = 0; row = col = -1;
+            int rows = occ.GetLength(0), cols = occ.GetLength(1);
+            // Quick success without removals
+            if (TryPlaceSim(reqRows, reqCols, occ, out row, out col, avoidClock))
+            {
+                removeCount = 0;
+                return true;
+            }
+            // Work on a copy
+            var occSim = new bool[rows, cols];
+            for (int r = 0; r < rows; r++)
+                for (int c = 0; c < cols; c++)
+                    occSim[r, c] = occ[r, c];
+
+            for (int k = 1; k <= simItems.Count; k++)
+            {
+                var it = simItems[k - 1];
+                FillCellsSim(it.Row, it.Col, it.RowSpan, it.ColSpan, occSim, false);
+                if (TryPlaceSim(reqRows, reqCols, occSim, out row, out col, avoidClock))
+                {
+                    removeCount = k;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private async Task<string> GetRandomUnusedPathForPlanAsync(HashSet<string> additionallyUsed)
+        {
+            int tries = GetImageTryCount();
+            CleanupCooldown();
+            var now = DateTime.UtcNow;
+            for (int i = 0; i < tries; i++)
+            {
+                var p = ImageService.GetRandomImagePath();
+                if (string.IsNullOrWhiteSpace(p)) return string.Empty;
+                if (UsedPaths.Contains(p) || additionallyUsed.Contains(p)) { await Task.Yield(); continue; }
+                if (_cooldown.TryGetValue(p, out var until) && until > now) { await Task.Yield(); continue; }
+                return p;
+            }
+            for (int i = 0; i < tries; i++)
+            {
+                var p = ImageService.GetRandomImagePath();
+                if (string.IsNullOrWhiteSpace(p)) return string.Empty;
+                if (!UsedPaths.Contains(p) && !additionallyUsed.Contains(p)) return p;
+                await Task.Yield();
+            }
+            return string.Empty;
+        }
+
+        private async Task PreloadImageUrlAsync(string url)
+        {
+            try { await JS.InvokeVoidAsync("window.app.preloadImage", url); } catch { }
         }
 
         private async Task WaitForGridReadyAsync(TimeSpan timeout)
