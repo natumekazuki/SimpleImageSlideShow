@@ -21,7 +21,11 @@
             </div>
             <div>
                 <label class="form-label">Min scale: @string.Format("{0:P0}", MinScale)</label>
-                <input type="range" min="10" max="100" value="@((int)(MinScale*100))" @oninput="OnScaleInput" />
+                <input type="range" min="10" max="100" value="@((int)(MinScale*100))" @oninput="OnMinScaleInput" />
+            </div>
+            <div>
+                <label class="form-label">Max scale: @string.Format("{0:P0}", MaxScale)</label>
+                <input type="range" min="10" max="100" value="@((int)(MaxScale*100))" @oninput="OnMaxScaleInput" />
             </div>
             <div>
                 <label class="form-label">Min tile width: @MinTilePx px</label>

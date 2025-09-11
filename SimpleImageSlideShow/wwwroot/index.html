@@ -81,6 +81,21 @@
           ro.observe(panel);
         } catch {}
       };
+
+      // Lightweight image preloader to warm browser cache
+      window.app.preloadImage = (function(){
+        var cache = [];
+        var MAX = 64;
+        return function(url){
+          try {
+            var img = new Image();
+            img.decoding = 'async';
+            img.src = url;
+            cache.push(img);
+            if(cache.length > MAX) cache.shift();
+          } catch {}
+        };
+      })();
     </script>
 </body>
 
