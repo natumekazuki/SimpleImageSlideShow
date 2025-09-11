@@ -233,5 +233,3 @@ h1:focus {
     }
 }
 
-/* Auto-hide cursor after inactivity */
-body.hide-cursor, body.hide-cursor * { cursor: none !important; }

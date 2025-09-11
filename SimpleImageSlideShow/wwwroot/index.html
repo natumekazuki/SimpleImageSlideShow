@@ -25,41 +25,7 @@
 
     <script src="_framework/blazor.webview.js" autostart="false"></script>
     <script>
-      (function(){
-        var timer;
-        var delay = 2000;
-        var styleEl;
-        var cursorHidden = false;
-        function ensureStyle(){
-          if(!styleEl){
-            styleEl = document.createElement('style');
-            styleEl.id = 'cursor-hide-style';
-            styleEl.textContent = 'body.hide-cursor, body.hide-cursor * { cursor: none !important; }';
-            document.head.appendChild(styleEl);
-          }
-        }
-        function showCursor(){
-          document.body.classList.remove('hide-cursor');
-          if(cursorHidden){
-            try { document.body.style.removeProperty('cursor'); } catch {}
-            cursorHidden = false;
-          }
-        }
-        function scheduleHide(){
-          clearTimeout(timer);
-          showCursor();
-          ensureStyle();
-          timer = setTimeout(function(){
-            document.body.classList.add('hide-cursor');
-            try { document.body.style.setProperty('cursor', 'none', 'important'); } catch {}
-            cursorHidden = true;
-          }, delay);
-        }
-        ['mousemove','mousedown','mouseenter','touchstart','wheel','pointermove','keydown','contextmenu'].forEach(function(ev){
-          window.addEventListener(ev, scheduleHide, { passive: true });
-        });
-        scheduleHide();
-      })();
+      // Utility functions exposed to Blazor components
       window.app = window.app || {};
       window.app.addResizeListener = function(dotnetRef){
         function h(){ dotnetRef.invokeMethodAsync('OnResize', window.innerWidth, window.innerHeight); }
