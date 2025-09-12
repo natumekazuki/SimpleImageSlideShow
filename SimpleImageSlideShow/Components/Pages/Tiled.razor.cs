@@ -460,16 +460,35 @@ namespace SimpleImageSlideShow.Components.Pages
             row = col = -1;
             int rows = occ.GetLength(0);
             int cols = occ.GetLength(1);
-            for (int r = 0; r <= rows - rowSpan; r++)
+
+            // Build all candidate top-left positions and shuffle for random probing order
+            int maxR = Math.Max(0, rows - rowSpan + 1);
+            int maxC = Math.Max(0, cols - colSpan + 1);
+            if (maxR == 0 || maxC == 0) return false;
+
+            var candidates = new List<(int r, int c)>(maxR * maxC);
+            for (int r = 0; r < maxR; r++)
+                for (int c = 0; c < maxC; c++)
+                    candidates.Add((r, c));
+
+            // Fisher–Yates shuffle
+            for (int i = candidates.Count - 1; i > 0; i--)
             {
-                for (int c = 0; c <= cols - colSpan; c++)
+                int j = Random.Shared.Next(i + 1);
+                (candidates[i], candidates[j]) = (candidates[j], candidates[i]);
+            }
+
+            foreach (var (r, c) in candidates)
+            {
+                bool ok = true;
+                for (int rr = r; rr < r + rowSpan && ok; rr++)
                 {
-                    bool ok = true;
-                    for (int rr = r; rr < r + rowSpan && ok; rr++)
-                        for (int cc = c; cc < c + colSpan; cc++)
-                            if (occ[rr, cc] || (avoidClock && IsClockCell(rr, cc))) { ok = false; break; }
-                    if (ok) { row = r; col = c; return true; }
+                    for (int cc = c; cc < c + colSpan; cc++)
+                    {
+                        if (occ[rr, cc] || (avoidClock && IsClockCell(rr, cc))) { ok = false; break; }
+                    }
                 }
+                if (ok) { row = r; col = c; return true; }
             }
             return false;
         }
