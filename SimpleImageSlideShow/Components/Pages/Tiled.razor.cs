@@ -91,7 +91,8 @@ namespace SimpleImageSlideShow.Components.Pages
         private IJSObjectReference? _resizeObj;
         private DotNetObjectReference<Tiled>? _selfRef;
         private const int PlanCapacity = 5; // plan up to 5 steps ahead
-        private const int RandomScaleTries = 5; // random scale attempts per placement
+        private const int RandomScaleTries = 10; // random ratio attempts per placement
+        private const double ShrinkGuardThreshold = 0.25; // 原寸未満回避を適用する長辺比率の上限
 
         // Precomputed next step to reduce stutter on tick
         private record PlannedStep
@@ -276,14 +277,16 @@ namespace SimpleImageSlideShow.Components.Pages
             if (size is null) return false;
             var (origW, origH) = size.Value;
 
-            var baseFit = GetBaseFitScaleFromDims(origW, origH);
+            // 画面長辺比ベースでサイズを決定（アップスケール禁止）。
             var hi = Math.Max(MinScale, Math.Min(1.0, MaxScale));
             var lo = Math.Min(MinScale, hi);
-            var rand = lo + Random.Shared.NextDouble() * Math.Max(0.0, hi - lo);
-            var scale = baseFit * rand;
-            // Strict: only place avoiding clock area in this phase.
-            // Try multiple random scales rather than step-down.
-            if (!TryPlaceScaled(origW, origH, imagePath, baseFit, rand, out var item, avoidClock: true))
+            var vLong = Math.Max(Math.Max(1.0, ViewportW), Math.Max(1.0, ViewportH));
+            var iLong = Math.Max(origW, origH);
+            var rImg = vLong > 0 ? (iLong / vLong) : MinScale; // 原寸の長辺が画面長辺に占める比率
+            // B: 小さい画像は原寸未満にしない → rImg が範囲内なら下限を rImg まで引き上げ
+            if (rImg <= ShrinkGuardThreshold) lo = Math.Max(lo, rImg);
+            var rand = lo < hi ? lo + Random.Shared.NextDouble() * (hi - lo) : lo;
+            if (!TryPlaceLongEdgeBasedNoUpscale(origW, origH, imagePath, lo, hi, rand, out var item, avoidClock: true))
             {
                 return false;
             }
@@ -309,14 +312,15 @@ namespace SimpleImageSlideShow.Components.Pages
                 if (size is null) continue;
                 var (origW, origH) = size.Value;
 
-                // choose initial scale (used for removal computation if needed)
-                var baseFit = GetBaseFitScaleFromDims(origW, origH);
+                // 長辺比ベースの初期候補（アップスケール禁止）
                 var hi = Math.Max(MinScale, Math.Min(1.0, MaxScale));
                 var lo = Math.Min(MinScale, hi);
-                var rand = lo + Random.Shared.NextDouble() * Math.Max(0.0, hi - lo);
-                var scale = baseFit * rand;
-                var sw = origW * scale;
-                var sh = origH * scale;
+                var vLong = Math.Max(Math.Max(1.0, ViewportW), Math.Max(1.0, ViewportH));
+                var iLong = Math.Max(origW, origH);
+                var rImg = vLong > 0 ? (iLong / vLong) : MinScale;
+                if (rImg <= ShrinkGuardThreshold) lo = Math.Max(lo, rImg);
+                var rand = lo < hi ? lo + Random.Shared.NextDouble() * (hi - lo) : lo;
+                var (sw, sh) = ComputeViewportLongEdgeTargetNoUpscale(origW, origH, rand, clampToGrid: true);
                 int reqCols = Math.Max(1, (int)Math.Ceiling(sw / TileW));
                 int reqRows = Math.Max(1, (int)Math.Ceiling(sh / TileH));
 
@@ -338,7 +342,7 @@ namespace SimpleImageSlideShow.Components.Pages
                         Top = OffsetY + r0 * TileH,
                         Width = reqCols * TileW,
                         Height = reqRows * TileH,
-                        Scale = scale,
+                        Scale = rand,
                         ImgWidth = sw,
                         ImgHeight = sh,
                         Src = BuildVirtualHostUrl(imagePath)
@@ -354,10 +358,8 @@ namespace SimpleImageSlideShow.Components.Pages
                 // then try a few random scales
                 for (int tries = 0; tries < RandomScaleTries; tries++)
                 {
-                    var rtry = lo + Random.Shared.NextDouble() * Math.Max(0.0, hi - lo);
-                    var scaleTry = baseFit * rtry;
-                    var swD = origW * scaleTry;
-                    var shD = origH * scaleTry;
+                    var rtry = lo < hi ? lo + Random.Shared.NextDouble() * (hi - lo) : lo;
+                    var (swD, shD) = ComputeViewportLongEdgeTargetNoUpscale(origW, origH, rtry, clampToGrid: true);
                     int reqColsD = Math.Max(1, (int)Math.Ceiling(swD / TileW));
                     int reqRowsD = Math.Max(1, (int)Math.Ceiling(shD / TileH));
                     if (reqColsD <= Cols && reqRowsD <= Rows && TryPlace(reqRowsD, reqColsD, out var rD, out var cD, avoidClock: true))
@@ -373,7 +375,7 @@ namespace SimpleImageSlideShow.Components.Pages
                             Top = OffsetY + rD * TileH,
                             Width = reqColsD * TileW,
                             Height = reqRowsD * TileH,
-                            Scale = scaleTry,
+                            Scale = rtry,
                             ImgWidth = swD,
                             ImgHeight = shD,
                             Src = BuildVirtualHostUrl(imagePath)
@@ -432,7 +434,7 @@ namespace SimpleImageSlideShow.Components.Pages
                     Top = OffsetY + rr * TileH,
                     Width = reqCols * TileW,
                     Height = reqRows * TileH,
-                    Scale = scale,
+                    Scale = rand,
                     ImgWidth = sw,
                     ImgHeight = sh,
                     Src = BuildVirtualHostUrl(imagePath)
@@ -526,19 +528,66 @@ namespace SimpleImageSlideShow.Components.Pages
                     occ[r, c] = value;
         }
 
-        private bool TryPlaceScaled(double origW, double origH, string filePath, double baseFit, double initialRandScale, out TiledItem item, bool avoidClock)
+        private (double sw, double sh) ComputeViewportAreaTargetNoUpscale(double origW, double origH, double ratio, bool clampToGrid)
+        {
+            var a = origH > 0 ? (origW / origH) : 1.0;
+            var screenArea = Math.Max(1.0, ViewportW) * Math.Max(1.0, ViewportH);
+            var targetArea = Math.Max(0.0, ratio) * screenArea;
+            var desW = Math.Sqrt(targetArea * a);
+            var desH = Math.Sqrt(targetArea / Math.Max(1e-9, a));
+            // 先にアップスケール禁止（原寸上限）を適用
+            var sw = Math.Min(desW, origW);
+            var sh = Math.Min(desH, origH);
+            // グリッドに収まるようアスペクト比を保って一様スケール
+            if (clampToGrid)
+            {
+                var s = Math.Min(GridW / Math.Max(1.0, sw), GridH / Math.Max(1.0, sh));
+                s = Math.Min(1.0, s);
+                sw *= s; sh *= s;
+            }
+            if (!double.IsFinite(sw) || sw <= 0) sw = Math.Min(origW, GridW);
+            if (!double.IsFinite(sh) || sh <= 0) sh = Math.Min(origH, GridH);
+            return (sw, sh);
+        }
+
+        private (double sw, double sh) ComputeViewportLongEdgeTargetNoUpscale(double origW, double origH, double ratio, bool clampToGrid)
+        {
+            var a = origH > 0 ? (origW / origH) : 1.0;
+            var vLong = Math.Max(Math.Max(1.0, ViewportW), Math.Max(1.0, ViewportH));
+            var desW = 0.0; var desH = 0.0;
+            if (a >= 1.0)
+            {
+                desW = Math.Max(0.0, ratio) * vLong;
+                desH = desW / Math.Max(1e-9, a);
+            }
+            else
+            {
+                desH = Math.Max(0.0, ratio) * vLong;
+                desW = desH * a;
+            }
+            // 先にアップスケール禁止（原寸上限）
+            var sw = Math.Min(desW, origW);
+            var sh = Math.Min(desH, origH);
+            // グリッドに収める（等倍スケール）
+            if (clampToGrid)
+            {
+                var s = Math.Min(GridW / Math.Max(1.0, sw), GridH / Math.Max(1.0, sh));
+                s = Math.Min(1.0, s);
+                sw *= s; sh *= s;
+            }
+            if (!double.IsFinite(sw) || sw <= 0) sw = Math.Min(origW, GridW);
+            if (!double.IsFinite(sh) || sh <= 0) sh = Math.Min(origH, GridH);
+            return (sw, sh);
+        }
+
+        private bool TryPlaceAreaBasedNoUpscale(double origW, double origH, string filePath, double lo, double hi, double initialRatio, out TiledItem item, bool avoidClock)
         {
             item = default!;
-            var hi = Math.Max(MinScale, Math.Min(1.0, MaxScale));
-            var lo = Math.Min(MinScale, hi);
-            // Try initial candidate first, then additional random candidates
             for (int attempt = 0; attempt < RandomScaleTries; attempt++)
             {
-                var rscale = attempt == 0 ? initialRandScale : lo + Random.Shared.NextDouble() * Math.Max(0.0, hi - lo);
-                rscale = Math.Clamp(rscale, lo, hi);
-                var scale = baseFit * rscale;
-                var sw = origW * scale;
-                var sh = origH * scale;
+                var ratio = attempt == 0 ? initialRatio : (lo < hi ? lo + Random.Shared.NextDouble() * (hi - lo) : lo);
+                ratio = Math.Clamp(ratio, lo, hi);
+                var (sw, sh) = ComputeViewportAreaTargetNoUpscale(origW, origH, ratio, clampToGrid: true);
 
                 int reqCols = Math.Max(1, (int)Math.Ceiling(sw / TileW));
                 int reqRows = Math.Max(1, (int)Math.Ceiling(sh / TileH));
@@ -563,7 +612,52 @@ namespace SimpleImageSlideShow.Components.Pages
                                 Top = OffsetY + r * TileH,
                                 Width = cs * TileW,
                                 Height = rs * TileH,
-                                Scale = scale,
+                                Scale = ratio,
+                                ImgWidth = sw,
+                                ImgHeight = sh,
+                                Src = BuildVirtualHostUrl(filePath)
+                            };
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+
+        private bool TryPlaceLongEdgeBasedNoUpscale(double origW, double origH, string filePath, double lo, double hi, double initialRatio, out TiledItem item, bool avoidClock)
+        {
+            item = default!;
+            for (int attempt = 0; attempt < RandomScaleTries; attempt++)
+            {
+                var ratio = attempt == 0 ? initialRatio : (lo < hi ? lo + Random.Shared.NextDouble() * (hi - lo) : lo);
+                ratio = Math.Clamp(ratio, lo, hi);
+                var (sw, sh) = ComputeViewportLongEdgeTargetNoUpscale(origW, origH, ratio, clampToGrid: true);
+
+                int reqCols = Math.Max(1, (int)Math.Ceiling(sw / TileW));
+                int reqRows = Math.Max(1, (int)Math.Ceiling(sh / TileH));
+
+                int maxCols = Math.Min(Cols, reqCols + 2);
+                int maxRows = Math.Min(Rows, reqRows + 2);
+
+                for (int rs = reqRows; rs <= maxRows; rs++)
+                {
+                    for (int cs = reqCols; cs <= maxCols; cs++)
+                    {
+                        if (TryPlace(rs, cs, out var r, out var c, avoidClock))
+                        {
+                            item = new TiledItem
+                            {
+                                Path = filePath,
+                                Row = r,
+                                Col = c,
+                                RowSpan = rs,
+                                ColSpan = cs,
+                                Left = OffsetX + c * TileW,
+                                Top = OffsetY + r * TileH,
+                                Width = cs * TileW,
+                                Height = rs * TileH,
+                                Scale = ratio,
                                 ImgWidth = sw,
                                 ImgHeight = sh,
                                 Src = BuildVirtualHostUrl(filePath)
@@ -945,13 +1039,14 @@ namespace SimpleImageSlideShow.Components.Pages
                 if (size is null) continue;
                 var (origW, origH) = size.Value;
 
-                var baseFit = GetBaseFitScaleFromDims(origW, origH);
                 var hi = Math.Max(MinScale, Math.Min(1.0, MaxScale));
                 var lo = Math.Min(MinScale, hi);
-                var rand = lo + Random.Shared.NextDouble() * Math.Max(0.0, hi - lo);
-                var scale = baseFit * rand;
-                var sw = origW * scale;
-                var sh = origH * scale;
+                var vLong2 = Math.Max(Math.Max(1.0, ViewportW), Math.Max(1.0, ViewportH));
+                var iLong2 = Math.Max(origW, origH);
+                var rImg2 = vLong2 > 0 ? (iLong2 / vLong2) : MinScale;
+                if (rImg2 <= ShrinkGuardThreshold) lo = Math.Max(lo, rImg2);
+                var rand = lo < hi ? lo + Random.Shared.NextDouble() * (hi - lo) : lo;
+                var (sw, sh) = ComputeViewportLongEdgeTargetNoUpscale(origW, origH, rand, clampToGrid: true);
                 int reqCols = Math.Max(1, (int)Math.Ceiling(sw / TileW));
                 int reqRows = Math.Max(1, (int)Math.Ceiling(sh / TileH));
                 if (reqCols > Cols || reqRows > Rows) continue;
@@ -965,7 +1060,7 @@ namespace SimpleImageSlideShow.Components.Pages
                         Col = c0,
                         RowSpan = reqRows,
                         ColSpan = reqCols,
-                        Scale = scale,
+                        Scale = rand,
                         ImgWidth = sw,
                         ImgHeight = sh,
                         Src = BuildVirtualHostUrl(imagePath),
@@ -976,10 +1071,8 @@ namespace SimpleImageSlideShow.Components.Pages
                 // Try additional random scales for no-removal placement
                 for (int tries = 0; tries < RandomScaleTries; tries++)
                 {
-                    var rtry = lo + Random.Shared.NextDouble() * Math.Max(0.0, hi - lo);
-                    var scaleTry = baseFit * rtry;
-                    var swD = origW * scaleTry;
-                    var shD = origH * scaleTry;
+                    var rtry = lo < hi ? lo + Random.Shared.NextDouble() * (hi - lo) : lo;
+                    var (swD, shD) = ComputeViewportLongEdgeTargetNoUpscale(origW, origH, rtry, clampToGrid: true);
                     int reqColsD = Math.Max(1, (int)Math.Ceiling(swD / TileW));
                     int reqRowsD = Math.Max(1, (int)Math.Ceiling(shD / TileH));
                     if (reqColsD <= Cols && reqRowsD <= Rows && TryPlaceSim(reqRowsD, reqColsD, occSim, out var rD, out var cD, avoidClock: true))
@@ -991,7 +1084,7 @@ namespace SimpleImageSlideShow.Components.Pages
                             Col = cD,
                             RowSpan = reqRowsD,
                             ColSpan = reqColsD,
-                            Scale = scaleTry,
+                            Scale = rtry,
                             ImgWidth = swD,
                             ImgHeight = shD,
                             Src = BuildVirtualHostUrl(imagePath),
@@ -1015,7 +1108,7 @@ namespace SimpleImageSlideShow.Components.Pages
                     Col = cc,
                     RowSpan = reqRows,
                     ColSpan = reqCols,
-                    Scale = scale,
+                    Scale = rand,
                     ImgWidth = sw,
                     ImgHeight = sh,
                     Src = BuildVirtualHostUrl(imagePath),
