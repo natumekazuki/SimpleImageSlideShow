@@ -58,8 +58,7 @@ namespace SimpleImageSlideShow.Components.Pages
         private string HostName => WebViewHost.HostName;
         private int MinTilePx = 128; // 最小タイル幅（px）
         private int ColsMax => (int)Math.Max(1, Math.Floor(ViewportW / Math.Max(1, MinTilePx)));
-        private double PanelWidth { get; set; } = 560;
-        private double PanelHeight { get; set; } = 260;
+        // Panel size is fixed in CSS for tiled mode; no persistence
 
         // Grid state
         private int TiledCols = 6;
@@ -91,9 +90,6 @@ namespace SimpleImageSlideShow.Components.Pages
         private Task? _loopTask;
         private IJSObjectReference? _resizeObj;
         private DotNetObjectReference<Tiled>? _selfRef;
-        private readonly Dictionary<string, string> _dataUrlCache = new(StringComparer.OrdinalIgnoreCase);
-        private readonly LinkedList<string> _dataUrlLru = new();
-        private const int DataUrlCacheCapacity = 256;
         private const int PlanCapacity = 5; // plan up to 5 steps ahead
 
         // Precomputed next step to reduce stutter on tick
@@ -141,8 +137,6 @@ namespace SimpleImageSlideShow.Components.Pages
             TiledCols = settings.TiledCols > 0 ? settings.TiledCols : 6;
             MinTilePx = settings.MinTilePx > 0 ? settings.MinTilePx : 128;
             ReuseTtlSeconds = settings.TiledReuseTtlSeconds > 0 ? settings.TiledReuseTtlSeconds : 120;
-            PanelWidth = 560;
-            PanelHeight = 260;
 
             if (!string.IsNullOrWhiteSpace(DirectoryPath) && Directory.Exists(DirectoryPath))
             {
@@ -209,12 +203,6 @@ namespace SimpleImageSlideShow.Components.Pages
             InvalidatePlan();
         }
 
-        private static async Task PrimeInitialAsync()
-        {
-            // Initial prime disabled to avoid burst loads and duplicates
-            await Task.CompletedTask;
-        }
-
         private async Task StartAsync()
         {
             await StopAsync();
@@ -278,8 +266,6 @@ namespace SimpleImageSlideShow.Components.Pages
             // Fill plan buffer
             try { await EnsurePlanAsync(); } catch { }
         }
-
-        // Replace phase now uses FIFO-based removal strategy
 
         private async Task<bool> AddOneAsync()
         {
@@ -592,103 +578,6 @@ namespace SimpleImageSlideShow.Components.Pages
             }
             return false;
         }
-
-        // Find best rectangle by clearing minimal overlaps and place one image at >= MinScale
-        private async Task ClearAndAddOneGuaranteedAsync()
-        {
-            const int imageTries = 40;
-            for (int t = 0; t < imageTries; t++)
-            {
-                var imagePath = await GetRandomUnusedPathAsync();
-                if (string.IsNullOrWhiteSpace(imagePath)) return;
-                var size = await ImageService.GetImageSizeAsync(imagePath);
-                if (size is null) continue;
-                var (origW, origH) = size.Value;
-
-                // choose scale in [MinScale,1]
-                var baseFit = GetBaseFitScaleFromDims(origW, origH);
-                var hi = Math.Max(MinScale, Math.Min(1.0, MaxScale));
-                var lo = Math.Min(MinScale, hi);
-                var rand = lo + Random.Shared.NextDouble() * Math.Max(0.0, hi - lo);
-                var scale = baseFit * rand;
-                var sw = origW * scale;
-                var sh = origH * scale;
-                int reqCols = Math.Max(1, (int)Math.Ceiling(sw / TileW));
-                int reqRows = Math.Max(1, (int)Math.Ceiling(sh / TileH));
-
-                if (reqCols > Cols || reqRows > Rows)
-                {
-                    // image too large for grid at MinScale; try another image
-                    continue;
-                }
-
-                if (TryPlace(reqRows, reqCols, out var rFree, out var cFree, avoidClock: true))
-                {
-                    var itemFree = new TiledItem
-                    {
-                        Path = imagePath,
-                        Row = rFree,
-                        Col = cFree,
-                        RowSpan = reqRows,
-                        ColSpan = reqCols,
-                        Left = OffsetX + cFree * TileW,
-                        Top = OffsetY + rFree * TileH,
-                        Width = reqCols * TileW,
-                        Height = reqRows * TileH,
-                        Scale = scale,
-                        ImgWidth = sw,
-                        ImgHeight = sh,
-                        Src = BuildVirtualHostUrl(imagePath)
-                    };
-                    FillCells(rFree, cFree, reqRows, reqCols, true);
-                    SetOwners(itemFree, true);
-                    Items.Add(itemFree);
-                    UsedPaths.Add(imagePath);
-                    return;
-                }
-
-                // not free: find position that requires minimal removals
-                if (FindBestRectToClear(reqRows, reqCols, out int r, out int c, out var toRemove))
-                {
-                    // fade-out overlapped items before removal
-                    foreach (var it in toRemove)
-                    {
-                        it.Removing = true;
-                    }
-                    StateHasChanged();
-                    await Task.Delay(300);
-                    foreach (var it in toRemove)
-                    {
-                        FillCells(it.Row, it.Col, it.RowSpan, it.ColSpan, false);
-                        SetOwners(it, false);
-                        Items.Remove(it);
-                        UsedPaths.Remove(it.Path);
-                    }
-                    var item = new TiledItem
-                    {
-                        Path = imagePath,
-                        Row = r,
-                        Col = c,
-                        RowSpan = reqRows,
-                        ColSpan = reqCols,
-                        Left = OffsetX + c * TileW,
-                        Top = OffsetY + r * TileH,
-                        Width = reqCols * TileW,
-                        Height = reqRows * TileH,
-                        Scale = scale,
-                        ImgWidth = sw,
-                        ImgHeight = sh,
-                        Src = BuildVirtualHostUrl(imagePath)
-                    };
-                    FillCells(r, c, reqRows, reqCols, true);
-                    SetOwners(item, true);
-                    Items.Add(item);
-                    UsedPaths.Add(imagePath);
-                    return;
-                }
-            }
-        }
-
         private void SetOwners(TiledItem item, bool set)
         {
             if (Owners is null) return;
@@ -710,83 +599,6 @@ namespace SimpleImageSlideShow.Components.Pages
             return double.IsFinite(fit) && fit > 0 ? fit : 1.0;
         }
 
-        private bool FindBestRectToClear(int reqRows, int reqCols, out int bestR, out int bestC, out List<TiledItem> toRemove)
-        {
-            bestR = bestC = -1;
-            toRemove = [];
-            int bestCount = int.MaxValue;
-            int totalPositions = Math.Max(1, (Rows - reqRows + 1) * (Cols - reqCols + 1));
-            int budget = GetProbeLimit(totalPositions);
-            var sampled = new HashSet<int>();
-
-            // If positions are few, scan all; otherwise random sampling within budget
-            if (totalPositions <= budget)
-            {
-                for (int r = 0; r <= Rows - reqRows; r++)
-                {
-                    for (int c = 0; c <= Cols - reqCols; c++)
-                    {
-                        if (IsOverlappingClock(r, c, reqRows, reqCols)) continue;
-                        var overlaps = GetOverlaps(r, c, reqRows, reqCols);
-                        int count = overlaps.Count;
-                        if (count < bestCount)
-                        {
-                            bestCount = count;
-                            bestR = r;
-                            bestC = c;
-                            toRemove = overlaps;
-                            if (bestCount == 0) return true;
-                        }
-                    }
-                }
-                return bestR >= 0;
-            }
-            else
-            {
-                for (int i = 0; i < budget; i++)
-                {
-                    int idx;
-                    do { idx = Random.Shared.Next(totalPositions); } while (!sampled.Add(idx));
-                    int r = idx / Math.Max(1, (Cols - reqCols + 1));
-                    int c = idx % Math.Max(1, (Cols - reqCols + 1));
-                    if (IsOverlappingClock(r, c, reqRows, reqCols)) continue;
-                    var overlaps = GetOverlaps(r, c, reqRows, reqCols);
-                    int count = overlaps.Count;
-                    if (count < bestCount)
-                    {
-                        bestCount = count;
-                        bestR = r;
-                        bestC = c;
-                        toRemove = overlaps;
-                        if (bestCount == 0) return true;
-                    }
-                }
-                return bestR >= 0;
-            }
-        }
-
-        private int GetProbeLimit(int totalPositions)
-        {
-            var occ = OccupancyPercent();
-            // Budget scales with grid size but caps for N100-class CPU
-            int baseBudget = occ < 50 ? 300 : occ < 80 ? 200 : 120;
-            return Math.Min(totalPositions, baseBudget);
-        }
-
-        private List<TiledItem> GetOverlaps(int row, int col, int rowSpan, int colSpan)
-        {
-            var set = new HashSet<TiledItem>();
-            if (Owners is null) return [];
-            for (int r = row; r < row + rowSpan; r++)
-            {
-                for (int c = col; c < col + colSpan; c++)
-                {
-                    var it = Owners[r, c];
-                    if (it is not null) set.Add(it);
-                }
-            }
-            return [.. set];
-        }
 
         private bool TryPlace(int rowSpan, int colSpan, out int row, out int col, bool avoidClock)
         {
