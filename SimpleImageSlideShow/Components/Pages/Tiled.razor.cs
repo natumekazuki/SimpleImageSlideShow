@@ -91,6 +91,7 @@ namespace SimpleImageSlideShow.Components.Pages
         private IJSObjectReference? _resizeObj;
         private DotNetObjectReference<Tiled>? _selfRef;
         private const int PlanCapacity = 5; // plan up to 5 steps ahead
+        private const int RandomScaleTries = 5; // random scale attempts per placement
 
         // Precomputed next step to reduce stutter on tick
         private record PlannedStep
@@ -281,8 +282,8 @@ namespace SimpleImageSlideShow.Components.Pages
             var rand = lo + Random.Shared.NextDouble() * Math.Max(0.0, hi - lo);
             var scale = baseFit * rand;
             // Strict: only place avoiding clock area in this phase.
-            // If it doesn't fit, return false so removal phase can try.
-            if (!TryPlaceScaled(origW, origH, imagePath, baseFit, ref rand, out var item, avoidClock: true))
+            // Try multiple random scales rather than step-down.
+            if (!TryPlaceScaled(origW, origH, imagePath, baseFit, rand, out var item, avoidClock: true))
             {
                 return false;
             }
@@ -308,7 +309,7 @@ namespace SimpleImageSlideShow.Components.Pages
                 if (size is null) continue;
                 var (origW, origH) = size.Value;
 
-                // choose initial scale once and do NOT degrade it
+                // choose initial scale (used for removal computation if needed)
                 var baseFit = GetBaseFitScaleFromDims(origW, origH);
                 var hi = Math.Max(MinScale, Math.Min(1.0, MaxScale));
                 var lo = Math.Min(MinScale, hi);
@@ -322,7 +323,8 @@ namespace SimpleImageSlideShow.Components.Pages
                 // if cannot fit even on an empty grid, skip this image
                 if (reqCols > Cols || reqRows > Rows) continue;
 
-                // try without removal first (avoid clock area)
+                // try without removal first (avoid clock area) with multiple random scales
+                // attempt initial chosen scale first
                 if (TryPlace(reqRows, reqCols, out var r0, out var c0, avoidClock: true))
                 {
                     var item0 = new TiledItem
@@ -349,45 +351,40 @@ namespace SimpleImageSlideShow.Components.Pages
                     return;
                 }
 
-                var randDown = rand;
-                for (int tries = 0; tries < 6; tries++)
+                // then try a few random scales
+                for (int tries = 0; tries < RandomScaleTries; tries++)
                 {
-                    if (randDown < MinScale) randDown = MinScale;
-                    var scaleDown = baseFit * randDown;
-                    var swD = origW * scaleDown;
-                    var shD = origH * scaleDown;
+                    var rtry = lo + Random.Shared.NextDouble() * Math.Max(0.0, hi - lo);
+                    var scaleTry = baseFit * rtry;
+                    var swD = origW * scaleTry;
+                    var shD = origH * scaleTry;
                     int reqColsD = Math.Max(1, (int)Math.Ceiling(swD / TileW));
                     int reqRowsD = Math.Max(1, (int)Math.Ceiling(shD / TileH));
-                    if (reqColsD <= Cols && reqRowsD <= Rows)
+                    if (reqColsD <= Cols && reqRowsD <= Rows && TryPlace(reqRowsD, reqColsD, out var rD, out var cD, avoidClock: true))
                     {
-                        if (TryPlace(reqRowsD, reqColsD, out var rD, out var cD, avoidClock: true))
+                        var itemD = new TiledItem
                         {
-                            var itemD = new TiledItem
-                            {
-                                Path = imagePath,
-                                Row = rD,
-                                Col = cD,
-                                RowSpan = reqRowsD,
-                                ColSpan = reqColsD,
-                                Left = OffsetX + cD * TileW,
-                                Top = OffsetY + rD * TileH,
-                                Width = reqColsD * TileW,
-                                Height = reqRowsD * TileH,
-                                Scale = scaleDown,
-                                ImgWidth = swD,
-                                ImgHeight = shD,
-                                Src = BuildVirtualHostUrl(imagePath)
-                            };
-                            FillCells(itemD.Row, itemD.Col, itemD.RowSpan, itemD.ColSpan, true);
-                            SetOwners(itemD, true);
-                            Items.Add(itemD);
-                            UsedPaths.Add(imagePath);
-                            AddCooldown(imagePath);
-                            return;
-                        }
+                            Path = imagePath,
+                            Row = rD,
+                            Col = cD,
+                            RowSpan = reqRowsD,
+                            ColSpan = reqColsD,
+                            Left = OffsetX + cD * TileW,
+                            Top = OffsetY + rD * TileH,
+                            Width = reqColsD * TileW,
+                            Height = reqRowsD * TileH,
+                            Scale = scaleTry,
+                            ImgWidth = swD,
+                            ImgHeight = shD,
+                            Src = BuildVirtualHostUrl(imagePath)
+                        };
+                        FillCells(itemD.Row, itemD.Col, itemD.RowSpan, itemD.ColSpan, true);
+                        SetOwners(itemD, true);
+                        Items.Add(itemD);
+                        UsedPaths.Add(imagePath);
+                        AddCooldown(imagePath);
+                        return;
                     }
-                    if (randDown <= MinScale + 0.001) break;
-                    randDown = Math.Max(MinScale, randDown * 0.85);
                 }
 
                 // simulate FIFO removals on a copy of the occupancy grid to find minimal removals (avoid clock area)
@@ -529,14 +526,17 @@ namespace SimpleImageSlideShow.Components.Pages
                     occ[r, c] = value;
         }
 
-        private bool TryPlaceScaled(double origW, double origH, string filePath, double baseFit, ref double randScale, out TiledItem item, bool avoidClock)
+        private bool TryPlaceScaled(double origW, double origH, string filePath, double baseFit, double initialRandScale, out TiledItem item, bool avoidClock)
         {
             item = default!;
-            var attempts = 6;
-            while (attempts-- > 0)
+            var hi = Math.Max(MinScale, Math.Min(1.0, MaxScale));
+            var lo = Math.Min(MinScale, hi);
+            // Try initial candidate first, then additional random candidates
+            for (int attempt = 0; attempt < RandomScaleTries; attempt++)
             {
-                if (randScale < MinScale) randScale = MinScale;
-                var scale = baseFit * randScale;
+                var rscale = attempt == 0 ? initialRandScale : lo + Random.Shared.NextDouble() * Math.Max(0.0, hi - lo);
+                rscale = Math.Clamp(rscale, lo, hi);
+                var scale = baseFit * rscale;
                 var sw = origW * scale;
                 var sh = origH * scale;
 
@@ -572,9 +572,6 @@ namespace SimpleImageSlideShow.Components.Pages
                         }
                     }
                 }
-
-                if (randScale <= MinScale + 0.001) break;
-                randScale = Math.Max(MinScale, randScale * 0.85);
             }
             return false;
         }
@@ -976,36 +973,31 @@ namespace SimpleImageSlideShow.Components.Pages
                     };
                 }
 
-                var randDown = rand;
-                for (int tries = 0; tries < 6; tries++)
+                // Try additional random scales for no-removal placement
+                for (int tries = 0; tries < RandomScaleTries; tries++)
                 {
-                    if (randDown < MinScale) randDown = MinScale;
-                    var scaleDown = baseFit * randDown;
-                    var swD = origW * scaleDown;
-                    var shD = origH * scaleDown;
+                    var rtry = lo + Random.Shared.NextDouble() * Math.Max(0.0, hi - lo);
+                    var scaleTry = baseFit * rtry;
+                    var swD = origW * scaleTry;
+                    var shD = origH * scaleTry;
                     int reqColsD = Math.Max(1, (int)Math.Ceiling(swD / TileW));
                     int reqRowsD = Math.Max(1, (int)Math.Ceiling(shD / TileH));
-                    if (reqColsD <= Cols && reqRowsD <= Rows)
+                    if (reqColsD <= Cols && reqRowsD <= Rows && TryPlaceSim(reqRowsD, reqColsD, occSim, out var rD, out var cD, avoidClock: true))
                     {
-                        if (TryPlaceSim(reqRowsD, reqColsD, occSim, out var rD, out var cD, avoidClock: true))
+                        return new PlannedStep
                         {
-                            return new PlannedStep
-                            {
-                                Path = imagePath,
-                                Row = rD,
-                                Col = cD,
-                                RowSpan = reqRowsD,
-                                ColSpan = reqColsD,
-                                Scale = scaleDown,
-                                ImgWidth = swD,
-                                ImgHeight = shD,
-                                Src = BuildVirtualHostUrl(imagePath),
-                                RemoveCount = 0
-                            };
-                        }
+                            Path = imagePath,
+                            Row = rD,
+                            Col = cD,
+                            RowSpan = reqRowsD,
+                            ColSpan = reqColsD,
+                            Scale = scaleTry,
+                            ImgWidth = swD,
+                            ImgHeight = shD,
+                            Src = BuildVirtualHostUrl(imagePath),
+                            RemoveCount = 0
+                        };
                     }
-                    if (randDown <= MinScale + 0.001) break;
-                    randDown = Math.Max(MinScale, randDown * 0.85);
                 }
 
                 if (!TryComputeFifoRemovalForPlacementSim(reqRows, reqCols, occSim, simItems, out int removeCount, out int rr, out int cc, avoidClock: true))
