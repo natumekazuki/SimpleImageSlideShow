@@ -37,10 +37,13 @@ namespace SimpleImageSlideShow.WinUI
             {
                 var appWindow = handler.PlatformView.GetAppWindow();
                 var nativeWindow = handler.PlatformView as Microsoft.UI.Xaml.Window;
+                nativeWindow.ExtendsContentIntoTitleBar = true;
+
                 if (appWindow != null)
                 {
                     try
                     {
+                        appWindow.TitleBar.ExtendsContentIntoTitleBar = true;
                         // True full screen (no title bar, covers taskbar)
                         appWindow.SetPresenter(AppWindowPresenterKind.FullScreen);
                         // Match title bar colors to app background (lightgray)
