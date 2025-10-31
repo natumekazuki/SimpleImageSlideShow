@@ -91,7 +91,7 @@ namespace SimpleImageSlideShow.Components.Pages
         private IJSObjectReference? _resizeObj;
         private DotNetObjectReference<Tiled>? _selfRef;
         private const int PlanCapacity = 5; // plan up to 5 steps ahead
-        private const int RandomScaleTries = 10; // random ratio attempts per placement
+        private uint RandomScaleTries { get; set; } = 10; // random ratio attempts per placement
         private const double ShrinkGuardThreshold = 0.25; // 原寸未満回避を適用する長辺比率の上限
 
         // Precomputed next step to reduce stutter on tick
@@ -139,6 +139,7 @@ namespace SimpleImageSlideShow.Components.Pages
             TiledCols = settings.TiledCols > 0 ? settings.TiledCols : 6;
             MinTilePx = settings.MinTilePx > 0 ? settings.MinTilePx : 128;
             ReuseTtlSeconds = settings.TiledReuseTtlSeconds > 0 ? settings.TiledReuseTtlSeconds : 120;
+            RandomScaleTries = settings.RandomScaleTries > 0 ? settings.RandomScaleTries : 10;
 
             if (!string.IsNullOrWhiteSpace(DirectoryPath) && Directory.Exists(DirectoryPath))
             {
@@ -819,6 +820,14 @@ namespace SimpleImageSlideShow.Components.Pages
             }
         }
 
+        private void OnRandomScaleTriesInput(ChangeEventArgs e)
+        {
+            if (e.Value is string s && uint.TryParse(s, out var v))
+            {
+                RandomScaleTries = Math.Max(1u, Math.Min(500u, v));
+            }
+        }
+
         private async Task SaveAndApplyAsync()
         {
             var settings = await SettingsService.LoadAsync();
@@ -831,6 +840,7 @@ namespace SimpleImageSlideShow.Components.Pages
             settings.TiledCols = TiledCols;
             settings.MinTilePx = MinTilePx;
             settings.TiledReuseTtlSeconds = ReuseTtlSeconds;
+            settings.RandomScaleTries = RandomScaleTries;
             // keep panel size fixed; stop persisting size
             await SettingsService.SaveAsync(settings);
             await StartAsync();

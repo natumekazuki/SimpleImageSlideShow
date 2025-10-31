@@ -31,6 +31,10 @@
                 <label class="form-label">Min tile width: @MinTilePx px</label>
                 <input type="range" min="64" max="512" value="@MinTilePx" @oninput="OnMinTileInput" />
             </div>
+            <div>
+                <label class="form-label">Scale calculate retry: @RandomScaleTries</label>
+                <input type="range" min="1" max="500" value="@RandomScaleTries" @oninput="OnRandomScaleTriesInput" />
+            </div>
             <div class="buttons">
                 <button class="btn btn-sm btn-primary" @onclick="SaveAndApplyAsync">Save</button>
                 <button class="btn btn-sm btn-secondary" @onclick="ChooseAndApplyFolderAsync">Change Folder</button>
