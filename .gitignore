@@ -6,6 +6,8 @@
 /SimpleImageSlideShow/obj
 /.vs
 /SimpleImageSlideShow/bin
+/installer/publish/
+/installer/artifacts/
 /._.gitignore
 *.bkp
 *.drawio
