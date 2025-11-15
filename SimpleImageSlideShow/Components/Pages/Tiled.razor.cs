@@ -58,6 +58,8 @@ namespace SimpleImageSlideShow.Components.Pages
         private double MinScale { get; set; } = 0.5;
         private double MaxScale { get; set; } = 1.0;
         private string? DirectoryPath { get; set; }
+        private bool IsFullScreen { get; set; }
+        private bool IsWindowModeChanging { get; set; }
         private string HostName => WebViewHost.HostName;
         private int MinTilePx = 128; // 最小タイル幅（px）
         private int ColsMax => (int)Math.Max(1, Math.Floor(ViewportW / Math.Max(1, MinTilePx)));
@@ -135,6 +137,10 @@ namespace SimpleImageSlideShow.Components.Pages
 
         protected override async Task OnInitializedAsync()
         {
+            await WindowService.InitializeAsync();
+            UpdateWindowMode(WindowService.CurrentMode, force: true);
+            WindowService.ModeChanged += OnWindowModeChanged;
+
             var settings = await SettingsService.LoadAsync();
             DelaySeconds = settings.DelaySeconds > 0 ? settings.DelaySeconds : 5;
             AudioVolumePercent = Math.Clamp(settings.AudioVolumePercent, 0, 100);
@@ -882,6 +888,7 @@ namespace SimpleImageSlideShow.Components.Pages
             settings.TiledReuseTtlSeconds = ReuseTtlSeconds;
             settings.RandomScaleTries = RandomScaleTries;
             settings.AudioVolumePercent = AudioVolumePercent;
+            settings.WindowDisplayMode = IsFullScreen ? "FullScreen" : "Windowed";
             // keep panel size fixed; stop persisting size
             await SettingsService.SaveAsync(settings);
             await StartAsync();
@@ -925,6 +932,7 @@ namespace SimpleImageSlideShow.Components.Pages
             WebViewHost.MapImagesFolder(directoryPath);
             var settings = await SettingsService.LoadAsync();
             settings.DirectoryPath = DirectoryPath;
+            settings.WindowDisplayMode = IsFullScreen ? "FullScreen" : "Windowed";
             await SettingsService.SaveAsync(settings);
             // reset and restart
             RecomputeGrid();
@@ -940,6 +948,41 @@ namespace SimpleImageSlideShow.Components.Pages
             await SettingsService.SaveAsync(settings);
             if (string.Equals(mode, "Slide", StringComparison.OrdinalIgnoreCase))
                 Nav.NavigateTo("/");
+        }
+
+        private async Task ToggleWindowModeAsync()
+        {
+            if (IsWindowModeChanging) return;
+            IsWindowModeChanging = true;
+            try
+            {
+                await WindowService.ToggleModeAsync();
+            }
+            catch
+            {
+                // swallow; UI will refresh via event if successful
+            }
+            finally
+            {
+                IsWindowModeChanging = false;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+
+        private void OnWindowModeChanged(object? sender, WindowDisplayModeChangedEventArgs e)
+        {
+            UpdateWindowMode(e.Mode);
+        }
+
+        private void UpdateWindowMode(WindowDisplayMode mode, bool force = false)
+        {
+            var isFull = mode == WindowDisplayMode.FullScreen;
+            if (!force && isFull == IsFullScreen) return;
+            IsFullScreen = isFull;
+            if (!force)
+            {
+                _ = InvokeAsync(StateHasChanged);
+            }
         }
 
         private void ExitApp() => WindowService.Exit();
@@ -1293,6 +1336,7 @@ namespace SimpleImageSlideShow.Components.Pages
             try { if (_resizeObj is not null) await _resizeObj.InvokeVoidAsync("dispose"); } catch { }
             try { _selfRef?.Dispose(); } catch { }
             try { _clockTimer?.Dispose(); } catch { }
+            WindowService.ModeChanged -= OnWindowModeChanged;
             ImageService.Dispose();
         }
 

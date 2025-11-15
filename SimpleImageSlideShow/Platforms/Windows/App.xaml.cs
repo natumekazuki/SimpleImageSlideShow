@@ -44,8 +44,6 @@ namespace SimpleImageSlideShow.WinUI
                     try
                     {
                         appWindow.TitleBar.ExtendsContentIntoTitleBar = true;
-                        // True full screen (no title bar, covers taskbar)
-                        appWindow.SetPresenter(AppWindowPresenterKind.FullScreen);
                         // Match title bar colors to app background (lightgray)
                         var tb = appWindow.TitleBar;
                         if (tb is not null)
@@ -54,44 +52,11 @@ namespace SimpleImageSlideShow.WinUI
                             var fg = Windows.UI.Color.FromArgb(255, 0xD3, 0xD3, 0xD3);
                             tb.BackgroundColor = bg;
                             tb.InactiveBackgroundColor = bg;
-                            tb.ButtonBackgroundColor = bg;
-                            tb.ButtonInactiveBackgroundColor = bg;
-                            tb.ButtonHoverBackgroundColor = bg;
-                            tb.ButtonPressedBackgroundColor = bg;
                             tb.ForegroundColor = fg;
                             tb.InactiveForegroundColor = fg;
-                            tb.ButtonForegroundColor = fg;
                         }
                     }
                     catch { }
-
-                    if (nativeWindow is not null)
-                    {
-                        // Ensure it stays full screen when window activates
-                        nativeWindow.Activated += (_, __) =>
-                        {
-                            try
-                            {
-                                appWindow.SetPresenter(AppWindowPresenterKind.FullScreen);
-                                var tb = appWindow.TitleBar;
-                                if (tb is not null)
-                                {
-                                    var bg = Windows.UI.Color.FromArgb(255, 0xD3, 0xD3, 0xD3);
-                                    var fg = Windows.UI.Color.FromArgb(255, 0xD3, 0xD3, 0xD3);
-                                    tb.BackgroundColor = bg;
-                                    tb.InactiveBackgroundColor = bg;
-                                    tb.ButtonBackgroundColor = bg;
-                                    tb.ButtonInactiveBackgroundColor = bg;
-                                    tb.ButtonHoverBackgroundColor = bg;
-                                    tb.ButtonPressedBackgroundColor = bg;
-                                    tb.ForegroundColor = fg;
-                                    tb.InactiveForegroundColor = fg;
-                                    tb.ButtonForegroundColor = fg;
-                                }
-                            }
-                            catch { }
-                        };
-                    }
                 }
             });
         }

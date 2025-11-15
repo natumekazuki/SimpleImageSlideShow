@@ -2,7 +2,13 @@ namespace SimpleImageSlideShow.Services
 {
     public interface IWindowService
     {
-        void ToggleFullScreen();
+        WindowDisplayMode CurrentMode { get; }
+
+        event EventHandler<WindowDisplayModeChangedEventArgs>? ModeChanged;
+
+        Task InitializeAsync();
+        Task SetModeAsync(WindowDisplayMode mode);
+        Task ToggleModeAsync();
         void Exit();
     }
 }
