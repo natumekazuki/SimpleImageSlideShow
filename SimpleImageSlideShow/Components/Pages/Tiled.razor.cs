@@ -46,12 +46,15 @@ namespace SimpleImageSlideShow.Components.Pages
             public double ImgWidth { get; set; }
             public double ImgHeight { get; set; }
             public required string Src { get; init; }
+            public string? AudioSrc { get; init; }
         }
 
         private List<TiledItem> Items { get; set; } = [];
         private HashSet<string> UsedPaths { get; } = new(StringComparer.OrdinalIgnoreCase);
 
         private uint DelaySeconds { get; set; } = 5;
+        private double AudioVolumePercent { get; set; } = 0;
+        private double AudioVolume => Math.Clamp(AudioVolumePercent, 0, 100) / 100.0;
         private double MinScale { get; set; } = 0.5;
         private double MaxScale { get; set; } = 1.0;
         private string? DirectoryPath { get; set; }
@@ -106,10 +109,12 @@ namespace SimpleImageSlideShow.Components.Pages
             public required double ImgWidth { get; init; }
             public required double ImgHeight { get; init; }
             public required string Src { get; init; }
+            public string? AudioSrc { get; init; }
             public int RemoveCount { get; init; }
         }
 
         private readonly List<PlannedStep> _planQueue = new();
+        private TiledItem? _lastTickItem;
 
         // Reuse TTL: avoid reusing the same image too soon
         private readonly Dictionary<string, DateTime> _cooldown = new(StringComparer.OrdinalIgnoreCase);
@@ -132,6 +137,7 @@ namespace SimpleImageSlideShow.Components.Pages
         {
             var settings = await SettingsService.LoadAsync();
             DelaySeconds = settings.DelaySeconds > 0 ? settings.DelaySeconds : 5;
+            AudioVolumePercent = Math.Clamp(settings.AudioVolumePercent, 0, 100);
             MinScale = Math.Clamp(settings.TiledMinScale, 0.1, 1.0);
             MaxScale = Math.Clamp(settings.TiledMaxScale, 0.1, 1.0);
             if (MaxScale < MinScale) MaxScale = MinScale;
@@ -203,6 +209,7 @@ namespace SimpleImageSlideShow.Components.Pages
             // reset items on recompute asリセットでOKの仕様
             Items.Clear();
             UsedPaths.Clear();
+            _lastTickItem = null;
             InvalidatePlan();
         }
 
@@ -210,26 +217,42 @@ namespace SimpleImageSlideShow.Components.Pages
         {
             await StopAsync();
             _cts = new CancellationTokenSource();
-            var token = _cts.Token;
-            var period = TimeSpan.FromSeconds(Math.Max(1, DelaySeconds));
-            var timer = new PeriodicTimer(period);
+            _lastTickItem = Items.LastOrDefault();
+            _loopTask = RunLoopAsync(_cts.Token);
+        }
 
-            _loopTask = Task.Run(async () =>
+        private async Task RunLoopAsync(CancellationToken token)
+        {
+            while (!token.IsCancellationRequested)
             {
-                try
+                var waitTarget = _lastTickItem;
+                if (waitTarget is not null)
                 {
-                    while (await timer.WaitForNextTickAsync(token))
+                    try
                     {
-                        await InvokeAsync(async () =>
-                        {
-                            await ApplyPlannedOrStepAsync();
-                            StateHasChanged();
-                        });
+                        await WaitForNextTickAsync(waitTarget, token);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break;
                     }
                 }
-                catch (OperationCanceledException) { }
-                finally { timer.Dispose(); }
-            }, token);
+
+                TiledItem? newItem = null;
+                try
+                {
+                    await InvokeAsync(async () =>
+                    {
+                        var item = await ApplyPlannedOrStepAsync();
+                        StateHasChanged();
+                        newItem = item;
+                    });
+                }
+                catch (OperationCanceledException) { break; }
+                catch { }
+
+                _lastTickItem = newItem ?? Items.LastOrDefault();
+            }
         }
 
         private async Task StopAsync()
@@ -239,6 +262,7 @@ namespace SimpleImageSlideShow.Components.Pages
                 _cts?.Cancel();
                 if (_loopTask is not null)
                     await Task.WhenAny(_loopTask, Task.Delay(500));
+                await StopAudioPlaybackAsync();
             }
             catch { }
             finally
@@ -258,24 +282,24 @@ namespace SimpleImageSlideShow.Components.Pages
             return total == 0 ? 0 : (100.0 * used / total);
         }
 
-        private async Task StepAsync()
+        private async Task<TiledItem?> StepAsync()
         {
-            if (Occupied is null) return;
+            if (Occupied is null) return null;
             var added = await AddOneAsync();
-            if (!added)
+            if (added is null)
             {
-                await AddWithFifoRemovalAsync();
+                added = await AddWithFifoRemovalAsync();
             }
-            // Fill plan buffer
             try { await EnsurePlanAsync(); } catch { }
+            return added;
         }
 
-        private async Task<bool> AddOneAsync()
+        private async Task<TiledItem?> AddOneAsync()
         {
             var imagePath = await GetRandomUnusedPathAsync();
-            if (string.IsNullOrWhiteSpace(imagePath)) return false;
+            if (string.IsNullOrWhiteSpace(imagePath)) return null;
             var size = await ImageService.GetImageSizeAsync(imagePath);
-            if (size is null) return false;
+            if (size is null) return null;
             var (origW, origH) = size.Value;
 
             // 画面長辺比ベースでサイズを決定（アップスケール禁止）。
@@ -289,26 +313,27 @@ namespace SimpleImageSlideShow.Components.Pages
             var rand = lo < hi ? lo + Random.Shared.NextDouble() * (hi - lo) : lo;
             if (!TryPlaceLongEdgeBasedNoUpscale(origW, origH, imagePath, lo, hi, rand, out var item, avoidClock: true))
             {
-                return false;
+                return null;
             }
 
+            item = item with { AudioSrc = GetAudioUrlForImage(imagePath) };
             FillCells(item.Row, item.Col, item.RowSpan, item.ColSpan, true);
             SetOwners(item, true);
             Items.Add(item);
             UsedPaths.Add(imagePath);
             AddCooldown(imagePath);
-            return true;
+            return item;
         }
 
         // Insert at initially chosen scale, removing oldest tiles (FIFO) until placement is possible.
-        private async Task AddWithFifoRemovalAsync()
+        private async Task<TiledItem?> AddWithFifoRemovalAsync()
         {
             // pick a candidate image
             const int imageTries = 40;
             for (int t = 0; t < imageTries; t++)
             {
                 var imagePath = await GetRandomUnusedPathAsync();
-                if (string.IsNullOrWhiteSpace(imagePath)) return;
+                if (string.IsNullOrWhiteSpace(imagePath)) return null;
                 var size = await ImageService.GetImageSizeAsync(imagePath);
                 if (size is null) continue;
                 var (origW, origH) = size.Value;
@@ -346,14 +371,15 @@ namespace SimpleImageSlideShow.Components.Pages
                         Scale = rand,
                         ImgWidth = sw,
                         ImgHeight = sh,
-                        Src = BuildVirtualHostUrl(imagePath)
+                        Src = BuildVirtualHostUrl(imagePath),
+                        AudioSrc = GetAudioUrlForImage(imagePath)
                     };
                     FillCells(item0.Row, item0.Col, item0.RowSpan, item0.ColSpan, true);
                     SetOwners(item0, true);
                     Items.Add(item0);
                     UsedPaths.Add(imagePath);
                     AddCooldown(imagePath);
-                    return;
+                    return item0;
                 }
 
                 // then try a few random scales
@@ -379,14 +405,15 @@ namespace SimpleImageSlideShow.Components.Pages
                             Scale = rtry,
                             ImgWidth = swD,
                             ImgHeight = shD,
-                            Src = BuildVirtualHostUrl(imagePath)
+                            Src = BuildVirtualHostUrl(imagePath),
+                            AudioSrc = GetAudioUrlForImage(imagePath)
                         };
                         FillCells(itemD.Row, itemD.Col, itemD.RowSpan, itemD.ColSpan, true);
                         SetOwners(itemD, true);
                         Items.Add(itemD);
                         UsedPaths.Add(imagePath);
                         AddCooldown(imagePath);
-                        return;
+                        return itemD;
                     }
                 }
 
@@ -438,15 +465,17 @@ namespace SimpleImageSlideShow.Components.Pages
                     Scale = rand,
                     ImgWidth = sw,
                     ImgHeight = sh,
-                    Src = BuildVirtualHostUrl(imagePath)
+                    Src = BuildVirtualHostUrl(imagePath),
+                    AudioSrc = GetAudioUrlForImage(imagePath)
                 };
                 FillCells(item.Row, item.Col, item.RowSpan, item.ColSpan, true);
                 SetOwners(item, true);
                 Items.Add(item);
                 UsedPaths.Add(imagePath);
                 AddCooldown(imagePath);
-                return;
+                return item;
             }
+            return null;
         }
 
         private bool TryComputeFifoRemovalForPlacement(int reqRows, int reqCols, out int removeCount, out int row, out int col, bool avoidClock)
@@ -828,6 +857,15 @@ namespace SimpleImageSlideShow.Components.Pages
             }
         }
 
+        private async Task OnVolumeInput(ChangeEventArgs e)
+        {
+            if (e.Value is string s && double.TryParse(s, NumberStyles.Number, CultureInfo.InvariantCulture, out var v))
+            {
+                AudioVolumePercent = Math.Clamp(v, 0, 100);
+                await ApplyAudioVolumeToJsAsync();
+            }
+        }
+
         private async Task SaveAndApplyAsync()
         {
             var settings = await SettingsService.LoadAsync();
@@ -841,6 +879,7 @@ namespace SimpleImageSlideShow.Components.Pages
             settings.MinTilePx = MinTilePx;
             settings.TiledReuseTtlSeconds = ReuseTtlSeconds;
             settings.RandomScaleTries = RandomScaleTries;
+            settings.AudioVolumePercent = AudioVolumePercent;
             // keep panel size fixed; stop persisting size
             await SettingsService.SaveAsync(settings);
             await StartAsync();
@@ -914,6 +953,8 @@ namespace SimpleImageSlideShow.Components.Pages
                 }
                 catch { }
 
+                await ApplyAudioVolumeToJsAsync();
+
                 // 初回はディレイ無視で1枚挿入（グリッド初期化を待つ）
                 await WaitForGridReadyAsync(TimeSpan.FromMilliseconds(800));
                 try
@@ -930,12 +971,11 @@ namespace SimpleImageSlideShow.Components.Pages
 
         private void InvalidatePlan() => _planQueue.Clear();
 
-        private async Task ApplyPlannedOrStepAsync()
+        private async Task<TiledItem?> ApplyPlannedOrStepAsync()
         {
             if (_planQueue.Count == 0)
             {
-                await StepAsync();
-                return;
+                return await StepAsync();
             }
 
             var plan = _planQueue[0];
@@ -972,7 +1012,8 @@ namespace SimpleImageSlideShow.Components.Pages
                 Scale = plan.Scale,
                 ImgWidth = plan.ImgWidth,
                 ImgHeight = plan.ImgHeight,
-                Src = plan.Src
+                Src = plan.Src,
+                AudioSrc = plan.AudioSrc
             };
             FillCells(item.Row, item.Col, item.RowSpan, item.ColSpan, true);
             SetOwners(item, true);
@@ -981,6 +1022,7 @@ namespace SimpleImageSlideShow.Components.Pages
             AddCooldown(plan.Path);
 
             try { await EnsurePlanAsync(); } catch { }
+            return item;
         }
 
         private record SimItem(string Path, int Row, int Col, int RowSpan, int ColSpan);
@@ -1074,6 +1116,7 @@ namespace SimpleImageSlideShow.Components.Pages
                         ImgWidth = sw,
                         ImgHeight = sh,
                         Src = BuildVirtualHostUrl(imagePath),
+                        AudioSrc = GetAudioUrlForImage(imagePath),
                         RemoveCount = 0
                     };
                 }
@@ -1098,6 +1141,7 @@ namespace SimpleImageSlideShow.Components.Pages
                             ImgWidth = swD,
                             ImgHeight = shD,
                             Src = BuildVirtualHostUrl(imagePath),
+                            AudioSrc = GetAudioUrlForImage(imagePath),
                             RemoveCount = 0
                         };
                     }
@@ -1122,6 +1166,7 @@ namespace SimpleImageSlideShow.Components.Pages
                     ImgWidth = sw,
                     ImgHeight = sh,
                     Src = BuildVirtualHostUrl(imagePath),
+                    AudioSrc = GetAudioUrlForImage(imagePath),
                     RemoveCount = Math.Max(0, removeCount)
                 };
             }
@@ -1194,6 +1239,52 @@ namespace SimpleImageSlideShow.Components.Pages
             }
         }
 
+        private async Task WaitForNextTickAsync(TiledItem? lastItem, CancellationToken token)
+        {
+            var delayTask = Task.Delay(TimeSpan.FromSeconds(Math.Max(1, DelaySeconds)), token);
+            if (lastItem?.AudioSrc is string audio && !string.IsNullOrWhiteSpace(audio))
+            {
+                var audioTask = PlayAudioAndWaitAsync(audio, token);
+                try
+                {
+                    await Task.WhenAll(delayTask, audioTask);
+                }
+                catch (OperationCanceledException) { throw; }
+                catch
+                {
+                    await delayTask;
+                }
+                return;
+            }
+            await delayTask;
+        }
+
+        private async Task<double> PlayAudioAndWaitAsync(string audioSrc, CancellationToken token)
+        {
+            try
+            {
+                return await JS.InvokeAsync<double>("window.app.playAudioAndWait", token, audioSrc);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        private async Task ApplyAudioVolumeToJsAsync()
+        {
+            try { await JS.InvokeVoidAsync("window.app.setAudioVolume", AudioVolume); } catch { }
+        }
+
+        private async Task StopAudioPlaybackAsync()
+        {
+            try { await JS.InvokeVoidAsync("window.app.stopAudioPlayback"); } catch { }
+        }
+
         public async ValueTask DisposeAsync()
         {
             await StopAsync();
@@ -1215,6 +1306,31 @@ namespace SimpleImageSlideShow.Components.Pages
             if (string.IsNullOrWhiteSpace(DirectoryPath)) return string.Empty;
             string rel = Path.GetRelativePath(DirectoryPath, absolutePath).Replace('\\', '/');
             return $"https://{HostName}/{rel}";
+        }
+
+        private string? GetAudioUrlForImage(string imagePath)
+        {
+            var audioPath = FindCompanionAudioPath(imagePath);
+            if (string.IsNullOrWhiteSpace(audioPath)) return null;
+            var url = BuildVirtualHostUrl(audioPath);
+            return string.IsNullOrWhiteSpace(url) ? null : url;
+        }
+
+        private string? FindCompanionAudioPath(string imagePath)
+        {
+            try
+            {
+                var dir = Path.GetDirectoryName(imagePath);
+                var name = Path.GetFileNameWithoutExtension(imagePath);
+                if (string.IsNullOrWhiteSpace(dir) || string.IsNullOrWhiteSpace(name)) return null;
+                foreach (var ext in AudioExtensions.Extensions)
+                {
+                    var candidate = Path.Combine(dir, name + ext);
+                    if (File.Exists(candidate)) return candidate;
+                }
+            }
+            catch { }
+            return null;
         }
 
         private void UpdateClockText()

@@ -39,8 +39,17 @@
 - `StopAsync`（:235-249）は `PeriodicTimer` 除去後もキャンセル/待機ロジックが成り立つよう `_loopTask` の終了を待つのみで問題無いが、`RunLoopAsync` 内で `Task.Delay` が `OperationCanceledException` を投げるので try/catch を追加する。
 - 設定保存 (`SaveAndApplyAsync` :820-852 付近) に変更は不要だが、`DelaySeconds` の最小値チェックは現状のまま使用する。
 
+### 6. 音声ボリューム設定の追加
+- 要件: アプリ起動時はミュート状態（0%）で開始し、ユーザーが 0〜100% のスライダーで音量を設定できるようにする。
+- `Models/AppSettings.cs` に `double AudioVolumePercent`（0〜100、初期値 0）を追加し、`SettingsService` で永続化する。
+- `Tiled` コンポーネントへ `double AudioVolume` プロパティを追加し、`OnInitializedAsync` で設定値を読み込みつつ 0〜1 に正規化（UI 表示は 0〜100）。`SaveAndApplyAsync` で設定へ書き戻す。
+- `Tiled.razor` の設定パネルに「Audio Volume」スライダーを追加し、`@oninput` で `OnVolumeInput` を呼んで即時適用可能にする。起動時は常に 0% で描画し、必要なら `SettingsService` の値を 0 にリセット。
+- JS 側 `playAudioAndWait` は `Audio` インスタンス生成時に `audio.volume = window.app.audioVolume ?? 0;` を参照するよう変更し、Blazor 側から `window.app.setAudioVolume(volume0to1)` を呼び出せる API を追加する。
+- `Tiled` コンポーネントで音量変更時に `JS.InvokeVoidAsync("window.app.setAudioVolume", AudioVolume)` を実行し、音声再生タスクで最新値が使われるようにする。
+
 ## 動作確認計画
 1. 画像のみのフォルダーで Tiled モードを起動し、従来通り `DelaySeconds` 間隔で配置されることを確認。
 2. 同じフォルダーに `sample01.jpg` と `sample01.mp3` の組を置き、Tiled モードで当該画像が表示された際に音声が自動再生され、音声尺（設定値より長い場合）だけ次のタイルが遅延することを確認。
 3. 音声が設定値より短い場合に `DelaySeconds` から外れないこと、および音声ファイルが存在しない画像が混在してもループが止まらないことを確認。
 4. フォルダー変更や設定更新 (`Save`/`Change Folder`) 後も音声が再生されることを手動確認。
+5. アプリ起動直後はミュート状態であり、スライダーを操作すると即座に音声出力レベルが変わること、設定保存後の再起動でも前回設定値が復元されることを確認。

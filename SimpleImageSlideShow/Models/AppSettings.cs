@@ -15,5 +15,7 @@ namespace SimpleImageSlideShow.Models
         public int TiledReuseTtlSeconds { get; set; } = 120;   // TTL to reuse an image in Tiled
 
         public uint RandomScaleTries { get; set; } = 10;      // number of tries to find a random scale that fits
+
+        public double AudioVolumePercent { get; set; } = 0;    // 0-100 slider, start muted
     }
 }
