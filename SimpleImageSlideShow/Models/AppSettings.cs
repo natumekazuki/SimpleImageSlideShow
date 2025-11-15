@@ -6,6 +6,7 @@ namespace SimpleImageSlideShow.Models
         public uint ImageCount { get; set; } = 3;
         public string? DirectoryPath { get; set; }
         public string LastMode { get; set; } = "Slide";
+        public string WindowDisplayMode { get; set; } = "FullScreen";
 
         // Tiled mode settings
         public double TiledMinScale { get; set; } = 0.5;      // 0.1-1.0 (relative to fit)

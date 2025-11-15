@@ -31,6 +31,8 @@ namespace SimpleImageSlideShow.Components.Pages
 
         private uint ImageCount { get; set; } = DefaultImageCount;
         private string? DirectoryPath { get; set; }
+        private bool IsFullScreen { get; set; }
+        private bool IsWindowModeChanging { get; set; }
 
         // fixed slider bounds
         private const uint DelayMax = 60;
@@ -115,7 +117,11 @@ namespace SimpleImageSlideShow.Components.Pages
             DirectoryPath = directoryPath;
             ImageService.LoadImages(directoryPath);
             WebViewHost.MapImagesFolder(directoryPath);
-            var settings = new AppSettings { DelaySeconds = this.DelaySeconds, ImageCount = this.ImageCount, DirectoryPath = this.DirectoryPath };
+            var settings = await SettingsService.LoadAsync();
+            settings.DelaySeconds = this.DelaySeconds;
+            settings.ImageCount = this.ImageCount;
+            settings.DirectoryPath = this.DirectoryPath;
+            settings.WindowDisplayMode = IsFullScreen ? "FullScreen" : "Windowed";
             await SettingsService.SaveAsync(settings);
             await RestartLoopAsync();
             await InvokeAsync(StateHasChanged);
@@ -176,7 +182,12 @@ namespace SimpleImageSlideShow.Components.Pages
 
         private async Task SaveAndApplyAsync()
         {
-            var settings = new AppSettings { DelaySeconds = this.DelaySeconds, ImageCount = this.ImageCount, DirectoryPath = this.DirectoryPath, LastMode = "Slide" };
+            var settings = await SettingsService.LoadAsync();
+            settings.DelaySeconds = this.DelaySeconds;
+            settings.ImageCount = this.ImageCount;
+            settings.DirectoryPath = this.DirectoryPath;
+            settings.LastMode = "Slide";
+            settings.WindowDisplayMode = IsFullScreen ? "FullScreen" : "Windowed";
             await SettingsService.SaveAsync(settings);
             await RestartLoopAsync();
             await InvokeAsync(StateHasChanged);
@@ -192,6 +203,10 @@ namespace SimpleImageSlideShow.Components.Pages
         protected override async Task OnInitializedAsync()
         {
             await base.OnInitializedAsync();
+
+            await WindowService.InitializeAsync();
+            UpdateWindowMode(WindowService.CurrentMode, force: true);
+            WindowService.ModeChanged += OnWindowModeChanged;
 
             // load settings
             var settings = await SettingsService.LoadAsync();
@@ -218,10 +233,46 @@ namespace SimpleImageSlideShow.Components.Pages
                 Nav.NavigateTo("/tiled");
         }
 
+        private async Task ToggleWindowModeAsync()
+        {
+            if (IsWindowModeChanging) return;
+            IsWindowModeChanging = true;
+            try
+            {
+                await WindowService.ToggleModeAsync();
+            }
+            catch
+            {
+                // ignore failures; state change event will keep UI honest
+            }
+            finally
+            {
+                IsWindowModeChanging = false;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+
+        private void OnWindowModeChanged(object? sender, WindowDisplayModeChangedEventArgs e)
+        {
+            UpdateWindowMode(e.Mode);
+        }
+
+        private void UpdateWindowMode(WindowDisplayMode mode, bool force = false)
+        {
+            var isFull = mode == WindowDisplayMode.FullScreen;
+            if (!force && isFull == IsFullScreen) return;
+            IsFullScreen = isFull;
+            if (!force)
+            {
+                _ = InvokeAsync(StateHasChanged);
+            }
+        }
+
         public void Dispose()
         {
             _ = StopLoopAsync();
             ImageService.Dispose();
+            WindowService.ModeChanged -= OnWindowModeChanged;
         }
     }
 }

@@ -19,6 +19,9 @@
                 <input type="range" min="1" max="@CountMax" value="@ImageCount" @oninput="OnCountInput" />
             </div>
             <div class="buttons">
+                <button class="btn btn-sm btn-outline-secondary" title="Toggle fullscreen" disabled="@IsWindowModeChanging" @onclick="ToggleWindowModeAsync">
+                    @(IsFullScreen ? "Windowed View" : "Full Screen")
+                </button>
                 <button class="btn btn-sm btn-primary" @onclick="SaveAndApplyAsync">Save</button>
                 <button class="btn btn-sm btn-secondary" @onclick="ChooseAndApplyFolderAsync">Change Folder</button>
                 <button class="btn btn-sm btn-danger" @onclick="ExitApp">Exit</button>
