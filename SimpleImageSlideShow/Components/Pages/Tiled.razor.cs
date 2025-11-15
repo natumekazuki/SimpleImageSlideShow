@@ -223,10 +223,11 @@ namespace SimpleImageSlideShow.Components.Pages
 
         private async Task RunLoopAsync(CancellationToken token)
         {
+            var shouldWait = _lastTickItem is not null;
             while (!token.IsCancellationRequested)
             {
                 var waitTarget = _lastTickItem;
-                if (waitTarget is not null)
+                if (waitTarget is not null || shouldWait)
                 {
                     try
                     {
@@ -237,6 +238,7 @@ namespace SimpleImageSlideShow.Components.Pages
                         break;
                     }
                 }
+                shouldWait = true;
 
                 TiledItem? newItem = null;
                 try
