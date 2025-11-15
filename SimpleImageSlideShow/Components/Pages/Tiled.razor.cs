@@ -927,6 +927,9 @@ namespace SimpleImageSlideShow.Components.Pages
         {
             var directoryPath = await SelectDirectoryAsync();
             if (string.IsNullOrWhiteSpace(directoryPath)) return;
+
+            await StopAsync();
+
             DirectoryPath = directoryPath;
             ImageService.LoadImages(directoryPath);
             WebViewHost.MapImagesFolder(directoryPath);
@@ -934,11 +937,22 @@ namespace SimpleImageSlideShow.Components.Pages
             settings.DirectoryPath = DirectoryPath;
             settings.WindowDisplayMode = IsFullScreen ? "FullScreen" : "Windowed";
             await SettingsService.SaveAsync(settings);
-            // reset and restart
-            RecomputeGrid();
-            await StartAsync();
-            await InvokeAsync(StateHasChanged);
-            try { await EnsurePlanAsync(); } catch { }
+
+            Nav.NavigateTo(Nav.Uri, forceLoad: true);
+        }
+
+        private void ResetImageState()
+        {
+            Items.Clear();
+            UsedPaths.Clear();
+            _planQueue.Clear();
+            _lastTickItem = null;
+
+            _cooldown.Clear();
+            while (_cooldownQueue.TryDequeue(out _, out _)) { }
+
+            Occupied = null;
+            Owners = null;
         }
 
         private async Task SwitchMode(string mode)

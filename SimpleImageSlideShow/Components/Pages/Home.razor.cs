@@ -114,6 +114,8 @@ namespace SimpleImageSlideShow.Components.Pages
             var directoryPath = await SelectDirectoryAsync();
             if (string.IsNullOrWhiteSpace(directoryPath)) return;
 
+            await this.StopLoopAsync();
+
             DirectoryPath = directoryPath;
             ImageService.LoadImages(directoryPath);
             WebViewHost.MapImagesFolder(directoryPath);
@@ -123,8 +125,8 @@ namespace SimpleImageSlideShow.Components.Pages
             settings.DirectoryPath = this.DirectoryPath;
             settings.WindowDisplayMode = IsFullScreen ? "FullScreen" : "Windowed";
             await SettingsService.SaveAsync(settings);
-            await RestartLoopAsync();
-            await InvokeAsync(StateHasChanged);
+
+            Nav.NavigateTo(Nav.Uri, forceLoad: true);
         }
 
         private async Task EnsureFolderLoadedAsync()

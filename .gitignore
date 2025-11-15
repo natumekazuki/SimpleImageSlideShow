@@ -11,3 +11,4 @@
 /._.gitignore
 *.bkp
 *.drawio
+/installer/AppVersion.ispp
