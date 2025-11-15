@@ -27,11 +27,11 @@
         <ApplicationId>com.companyname.simpleimageslideshow</ApplicationId>
 
         <!-- Versions -->
-        <Version>1.0.1</Version>
-        <FileVersion>1.0.1.0</FileVersion>
-        <AssemblyVersion>1.0.1.0</AssemblyVersion>
-        <ApplicationDisplayVersion>1.0.1</ApplicationDisplayVersion>
-        <ApplicationVersion>2</ApplicationVersion>
+        <Version>1.1.0</Version>
+        <FileVersion>1.1.0.0</FileVersion>
+        <AssemblyVersion>1.1.0.0</AssemblyVersion>
+        <ApplicationDisplayVersion>1.1.0</ApplicationDisplayVersion>
+        <ApplicationVersion>3</ApplicationVersion>
 
         <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
         <TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
