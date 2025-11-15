@@ -218,7 +218,7 @@ namespace SimpleImageSlideShow.Components.Pages
             await StopAsync();
             _cts = new CancellationTokenSource();
             _lastTickItem = Items.LastOrDefault();
-            _loopTask = RunLoopAsync(_cts.Token);
+            _loopTask = Task.Run(() => RunLoopAsync(_cts.Token));
         }
 
         private async Task RunLoopAsync(CancellationToken token)
