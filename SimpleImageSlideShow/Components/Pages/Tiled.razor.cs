@@ -49,6 +49,8 @@ namespace SimpleImageSlideShow.Components.Pages
             public string? AudioSrc { get; init; }
         }
 
+        private readonly record struct ViewportSize(double Width, double Height);
+
         private List<TiledItem> Items { get; set; } = [];
         private HashSet<string> UsedPaths { get; } = new(StringComparer.OrdinalIgnoreCase);
 
@@ -216,6 +218,18 @@ namespace SimpleImageSlideShow.Components.Pages
             ViewportH = Math.Max(1, h);
             RecomputeGrid();
             await InvokeAsync(StateHasChanged);
+        }
+
+        private async Task RefreshViewportAsync()
+        {
+            try
+            {
+                var viewport = await JS.InvokeAsync<ViewportSize>("window.app.getViewportSize");
+                await OnResize((int)Math.Round(viewport.Width), (int)Math.Round(viewport.Height));
+            }
+            catch
+            {
+            }
         }
 
         private void RecomputeGrid()
@@ -1100,13 +1114,15 @@ namespace SimpleImageSlideShow.Components.Pages
             finally
             {
                 IsWindowModeChanging = false;
+                await RefreshViewportAsync();
                 await InvokeAsync(StateHasChanged);
             }
         }
 
-        private void OnWindowModeChanged(object? sender, WindowDisplayModeChangedEventArgs e)
+        private async void OnWindowModeChanged(object? sender, WindowDisplayModeChangedEventArgs e)
         {
             UpdateWindowMode(e.Mode);
+            await RefreshViewportAsync();
         }
 
         private void UpdateWindowMode(WindowDisplayMode mode, bool force = false)
