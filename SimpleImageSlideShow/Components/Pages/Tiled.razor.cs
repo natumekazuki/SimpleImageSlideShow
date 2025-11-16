@@ -145,16 +145,6 @@ namespace SimpleImageSlideShow.Components.Pages
         private int ReuseTtlSeconds = 120;
         private const string DefaultBackgroundColor = "#D3D3D3";
 
-        private static readonly (string Value, string Label)[] BackgroundColorOptions = new[]
-        {
-            ("#D3D3D3", "Light Gray"),
-            ("#000000", "Black"),
-            ("#1E1E2C", "Deep Navy"),
-            ("#2E8B57", "Sea Green"),
-            ("#FFFFFF", "White"),
-            ("#36454F", "Charcoal")
-        };
-
         private string BackgroundStyle => $"--app-background-color:{BackgroundColor};background-color:var(--app-background-color);";
 
         private static async Task<string> SelectDirectoryAsync()
@@ -899,9 +889,9 @@ namespace SimpleImageSlideShow.Components.Pages
             }
         }
 
-        private void OnBackgroundColorChanged(ChangeEventArgs e)
+        private void OnBackgroundColorSelected(string value)
         {
-            var next = NormalizeBackgroundColor(e.Value?.ToString());
+            var next = NormalizeBackgroundColor(value);
             if (!string.Equals(next, BackgroundColor, StringComparison.OrdinalIgnoreCase))
             {
                 BackgroundColor = next;
