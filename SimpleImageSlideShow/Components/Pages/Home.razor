@@ -18,6 +18,15 @@
                 <label class="form-label">Count: @ImageCount</label>
                 <input type="range" min="1" max="@CountMax" value="@ImageCount" @oninput="OnCountInput" />
             </div>
+            <div>
+                <label class="form-label">Background</label>
+                <select class="form-select form-select-sm" value="@BackgroundColor" @onchange="OnBackgroundColorChanged">
+                    @foreach (var option in BackgroundColorOptions)
+                    {
+                        <option value="@option.Value" selected="@((BackgroundColor == option.Value) ? "selected" : null)">@option.Label</option>
+                    }
+                </select>
+            </div>
             <div class="buttons">
                 <button class="btn btn-sm btn-outline-secondary" title="Toggle fullscreen" disabled="@IsWindowModeChanging" @onclick="ToggleWindowModeAsync">
                     @(IsFullScreen ? "Windowed View" : "Full Screen")
@@ -30,7 +39,7 @@
     </div>
 </div>
 
-<div class="slideshow-container">
+<div class="slideshow-container" style="@BackgroundStyle">
 
     @if (this.Slides.Count > 0)
     {

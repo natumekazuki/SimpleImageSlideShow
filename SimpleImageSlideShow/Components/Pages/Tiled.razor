@@ -15,6 +15,15 @@
                 <input type="range" min="1" max="60" value="@DelaySeconds" @oninput="OnDelayInput" />
             </div>
             <div>
+                <label class="form-label">Background</label>
+                <select class="form-select form-select-sm" value="@BackgroundColor" @onchange="OnBackgroundColorChanged">
+                    @foreach (var option in BackgroundColorOptions)
+                    {
+                        <option value="@option.Value" selected="@((BackgroundColor == option.Value) ? "selected" : null)">@option.Label</option>
+                    }
+                </select>
+            </div>
+            <div>
                 <label class="form-label">Audio volume: @Math.Round(AudioVolumePercent)%</label>
                 <input type="range" min="0" max="100" value="@((int)Math.Round(AudioVolumePercent))" @oninput="OnVolumeInput" />
                 <div class="text-muted small">Starts muted until changed</div>
@@ -72,7 +81,7 @@
     </div>
 </div>
 
-<div class="slideshow-container" @ref="ContainerRef">
+<div class="slideshow-container" @ref="ContainerRef" style="@BackgroundStyle">
     @foreach (var item in Items)
     {
         var style = $"left:{item.Left}px;top:{item.Top}px;width:{item.Width}px;height:{item.Height}px;";

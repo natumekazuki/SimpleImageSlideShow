@@ -30,6 +30,7 @@ namespace SimpleImageSlideShow.Components.Pages
         private uint AnimationDelaySeconds => this.DelaySeconds * this.ImageCount;
 
         private uint ImageCount { get; set; } = DefaultImageCount;
+        private string BackgroundColor { get; set; } = DefaultBackgroundColor;
         private string? DirectoryPath { get; set; }
         private bool IsFullScreen { get; set; }
         private bool IsWindowModeChanging { get; set; }
@@ -41,6 +42,19 @@ namespace SimpleImageSlideShow.Components.Pages
         private const uint DefaultImageCount = 3;
 
         private const uint DefaultDelaySeconds = 5;
+        private const string DefaultBackgroundColor = "#D3D3D3";
+
+        private static readonly (string Value, string Label)[] BackgroundColorOptions = new[]
+        {
+            ("#D3D3D3", "Light Gray"),
+            ("#000000", "Black"),
+            ("#1E1E2C", "Deep Navy"),
+            ("#2E8B57", "Sea Green"),
+            ("#FFFFFF", "White"),
+            ("#36454F", "Charcoal")
+        };
+
+        private string BackgroundStyle => $"--app-background-color:{BackgroundColor};background-color:var(--app-background-color);";
 
         private static async Task<string> SelectDirectoryAsync()
         {
@@ -123,6 +137,7 @@ namespace SimpleImageSlideShow.Components.Pages
             settings.DelaySeconds = this.DelaySeconds;
             settings.ImageCount = this.ImageCount;
             settings.DirectoryPath = this.DirectoryPath;
+            settings.BackgroundColor = this.BackgroundColor;
             settings.WindowDisplayMode = IsFullScreen ? "FullScreen" : "Windowed";
             await SettingsService.SaveAsync(settings);
 
@@ -182,6 +197,22 @@ namespace SimpleImageSlideShow.Components.Pages
             }
         }
 
+        private void OnBackgroundColorChanged(ChangeEventArgs e)
+        {
+            var next = NormalizeBackgroundColor(e.Value?.ToString());
+            if (!string.Equals(next, BackgroundColor, StringComparison.OrdinalIgnoreCase))
+            {
+                BackgroundColor = next;
+            }
+        }
+
+        private static string NormalizeBackgroundColor(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return DefaultBackgroundColor;
+            var trimmed = value.Trim();
+            return trimmed.StartsWith('#') ? trimmed : $"#{trimmed}";
+        }
+
         private async Task SaveAndApplyAsync()
         {
             var settings = await SettingsService.LoadAsync();
@@ -189,6 +220,7 @@ namespace SimpleImageSlideShow.Components.Pages
             settings.ImageCount = this.ImageCount;
             settings.DirectoryPath = this.DirectoryPath;
             settings.LastMode = "Slide";
+            settings.BackgroundColor = this.BackgroundColor;
             settings.WindowDisplayMode = IsFullScreen ? "FullScreen" : "Windowed";
             await SettingsService.SaveAsync(settings);
             await RestartLoopAsync();
@@ -219,6 +251,7 @@ namespace SimpleImageSlideShow.Components.Pages
             }
             this.DelaySeconds = settings.DelaySeconds > 0 ? settings.DelaySeconds : DefaultDelaySeconds;
             this.ImageCount = settings.ImageCount > 0 ? settings.ImageCount : DefaultImageCount;
+            this.BackgroundColor = NormalizeBackgroundColor(settings.BackgroundColor);
             this.DirectoryPath = settings.DirectoryPath;
 
             await EnsureFolderLoadedAsync();

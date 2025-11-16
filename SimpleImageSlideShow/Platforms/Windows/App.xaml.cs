@@ -1,6 +1,8 @@
-﻿using Microsoft.Maui.Handlers;
+using Microsoft.Maui.Handlers;
 using Microsoft.Maui.Platform;
 using Microsoft.UI.Windowing;
+using SimpleImageSlideShow.Services;
+using System.Globalization;
 
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
@@ -44,16 +46,20 @@ namespace SimpleImageSlideShow.WinUI
                     try
                     {
                         appWindow.TitleBar.ExtendsContentIntoTitleBar = true;
-                        // Match title bar colors to app background (lightgray)
+                        // Match title bar colors to user-selected background
                         var tb = appWindow.TitleBar;
                         if (tb is not null)
                         {
-                            var bg = Windows.UI.Color.FromArgb(255, 0xD3, 0xD3, 0xD3); // #D3D3D3 lightgray
-                            var fg = Windows.UI.Color.FromArgb(255, 0xD3, 0xD3, 0xD3);
+                            var bg = ResolveTitleBarColor();
+                            var fg = bg;
                             tb.BackgroundColor = bg;
                             tb.InactiveBackgroundColor = bg;
                             tb.ForegroundColor = fg;
                             tb.InactiveForegroundColor = fg;
+                            tb.ButtonBackgroundColor = bg;
+                            tb.ButtonInactiveBackgroundColor = bg;
+                            tb.ButtonForegroundColor = fg;
+                            tb.ButtonInactiveForegroundColor = fg;
                         }
                     }
                     catch { }
@@ -62,6 +68,50 @@ namespace SimpleImageSlideShow.WinUI
         }
 
         protected override MauiApp CreateMauiApp() => MauiProgram.CreateMauiApp();
+
+        private static Windows.UI.Color ResolveTitleBarColor()
+        {
+            try
+            {
+                var settingsService = new SettingsService();
+                var settings = settingsService.LoadAsync().GetAwaiter().GetResult();
+                return ParseColorOrDefault(settings?.BackgroundColor);
+            }
+            catch
+            {
+                return DefaultTitleBarColor;
+            }
+        }
+
+        private static Windows.UI.Color ParseColorOrDefault(string? hex)
+        {
+            if (string.IsNullOrWhiteSpace(hex)) return DefaultTitleBarColor;
+            var trimmed = hex.Trim();
+            if (trimmed.StartsWith('#')) trimmed = trimmed[1..];
+
+            if (uint.TryParse(trimmed, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value))
+            {
+                if (trimmed.Length == 6)
+                {
+                    var r = (byte)((value & 0xFF0000) >> 16);
+                    var g = (byte)((value & 0x00FF00) >> 8);
+                    var b = (byte)(value & 0x0000FF);
+                    return Windows.UI.Color.FromArgb(255, r, g, b);
+                }
+                if (trimmed.Length == 8)
+                {
+                    var a = (byte)((value & 0xFF000000) >> 24);
+                    var r = (byte)((value & 0x00FF0000) >> 16);
+                    var g = (byte)((value & 0x0000FF00) >> 8);
+                    var b = (byte)(value & 0x000000FF);
+                    return Windows.UI.Color.FromArgb(a, r, g, b);
+                }
+            }
+
+            return DefaultTitleBarColor;
+        }
+
+        private static Windows.UI.Color DefaultTitleBarColor { get; } = Windows.UI.Color.FromArgb(255, 0xD3, 0xD3, 0xD3);
     }
 
 }
