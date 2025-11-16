@@ -114,6 +114,8 @@ namespace SimpleImageSlideShow.Components.Pages
         private string ClockTime = "--:--";
         private string ClockDate = "--/--(-)";
         private Timer? _clockTimer;
+        private CancellationTokenSource? _clockLayoutUpdateCts;
+        private static readonly TimeSpan ClockLayoutDebounceDelay = TimeSpan.FromMilliseconds(150);
 
         private CancellationTokenSource? _cts;
         private Task? _loopTask;
@@ -963,11 +965,7 @@ namespace SimpleImageSlideShow.Components.Pages
 
             if (ShowClock == show) return;
             ShowClock = show;
-            ComputeClockReservedCells();
-            UpdateClockOverlap();
-            RemoveClockOverlaps();
-            InvalidatePlan();
-            StateHasChanged();
+            RefreshClockLayout(immediate: true);
         }
 
         private void OnClockAvoidOverlapChanged(ChangeEventArgs e)
@@ -984,11 +982,7 @@ namespace SimpleImageSlideShow.Components.Pages
 
             if (AvoidClockOverlap == avoid) return;
             AvoidClockOverlap = avoid;
-            ComputeClockReservedCells();
-            UpdateClockOverlap();
-            RemoveClockOverlaps();
-            InvalidatePlan();
-            StateHasChanged();
+            RefreshClockLayout(immediate: true);
         }
 
         private void OnClockCornerChanged(ChangeEventArgs e)
@@ -996,11 +990,7 @@ namespace SimpleImageSlideShow.Components.Pages
             var next = NormalizeClockCorner(e.Value?.ToString());
             if (string.Equals(next, ClockCorner, StringComparison.Ordinal)) return;
             ClockCorner = next;
-            ComputeClockReservedCells();
-            UpdateClockOverlap();
-            RemoveClockOverlaps();
-            InvalidatePlan();
-            StateHasChanged();
+            RefreshClockLayout(immediate: true);
         }
 
         private void OnClockScaleInput(ChangeEventArgs e)
@@ -1010,12 +1000,78 @@ namespace SimpleImageSlideShow.Components.Pages
                 var nextScale = Math.Clamp(v / 100.0, 0.5, 5.0);
                 if (Math.Abs(nextScale - ClockScale) < 0.0001) return;
                 ClockScale = nextScale;
+                RefreshClockLayout(immediate: false);
+            }
+        }
+
+        private void RefreshClockLayout(bool immediate)
+        {
+            if (immediate)
+            {
+                CancelClockLayoutUpdate();
                 ComputeClockReservedCells();
                 UpdateClockOverlap();
                 RemoveClockOverlaps();
                 InvalidatePlan();
                 StateHasChanged();
             }
+            else
+            {
+                StateHasChanged();
+                ScheduleClockLayoutUpdate();
+            }
+        }
+
+        private void ScheduleClockLayoutUpdate()
+        {
+            var previous = _clockLayoutUpdateCts;
+            var nextCts = new CancellationTokenSource();
+            _clockLayoutUpdateCts = nextCts;
+
+            if (previous is not null)
+            {
+                try { previous.Cancel(); } catch { }
+                previous.Dispose();
+            }
+
+            _ = DebouncedClockLayoutUpdateAsync(nextCts);
+        }
+
+        private async Task DebouncedClockLayoutUpdateAsync(CancellationTokenSource cts)
+        {
+            try
+            {
+                await Task.Delay(ClockLayoutDebounceDelay, cts.Token);
+                if (cts.IsCancellationRequested) return;
+                await InvokeAsync(() =>
+                {
+                    if (cts.IsCancellationRequested) return;
+                    ComputeClockReservedCells();
+                    UpdateClockOverlap();
+                    RemoveClockOverlaps();
+                    InvalidatePlan();
+                    StateHasChanged();
+                });
+            }
+            catch (TaskCanceledException) { }
+            catch { }
+            finally
+            {
+                if (_clockLayoutUpdateCts == cts)
+                {
+                    _clockLayoutUpdateCts = null;
+                }
+                cts.Dispose();
+            }
+        }
+
+        private void CancelClockLayoutUpdate()
+        {
+            var cts = _clockLayoutUpdateCts;
+            if (cts is null) return;
+            _clockLayoutUpdateCts = null;
+            try { cts.Cancel(); } catch { }
+            cts.Dispose();
         }
 
         private async Task OnVolumeInput(ChangeEventArgs e)
@@ -1512,6 +1568,7 @@ namespace SimpleImageSlideShow.Components.Pages
             try { if (_resizeObj is not null) await _resizeObj.InvokeVoidAsync("dispose"); } catch { }
             try { _selfRef?.Dispose(); } catch { }
             try { _clockTimer?.Dispose(); } catch { }
+            CancelClockLayoutUpdate();
             WindowService.ModeChanged -= OnWindowModeChanged;
             ImageService.Dispose();
         }
