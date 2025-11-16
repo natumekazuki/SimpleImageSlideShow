@@ -83,8 +83,21 @@ namespace SimpleImageSlideShow.Components.Pages
         // Clock overlay (reserved area in grid)
         private const double ClockReservedWidth = 320;   // px (keep in sync with CSS)
         private const double ClockReservedHeight = 140;  // px (keep in sync with CSS)
-        private const double ClockMarginLeft = 12;       // px
-        private const double ClockMarginBottom = 12;     // px
+        private const double ClockMarginHorizontal = 12; // px
+        private const double ClockMarginVertical = 12;   // px
+        private const string ClockCornerTopLeft = "TopLeft";
+        private const string ClockCornerTopRight = "TopRight";
+        private const string ClockCornerBottomLeft = "BottomLeft";
+        private const string ClockCornerBottomRight = "BottomRight";
+        private static readonly (string Value, string Label)[] ClockCornerChoices = new[]
+        {
+            (ClockCornerTopLeft, "Top Left"),
+            (ClockCornerTopRight, "Top Right"),
+            (ClockCornerBottomLeft, "Bottom Left"),
+            (ClockCornerBottomRight, "Bottom Right")
+        };
+        private bool ShowClock { get; set; } = true;
+        private string ClockCorner { get; set; } = ClockCornerBottomLeft;
         private bool[,]? ClockCells;
         private bool ClockOverlapped = false;
         private string ClockTime = "--:--";
@@ -152,6 +165,8 @@ namespace SimpleImageSlideShow.Components.Pages
             MinTilePx = settings.MinTilePx > 0 ? settings.MinTilePx : 128;
             ReuseTtlSeconds = settings.TiledReuseTtlSeconds > 0 ? settings.TiledReuseTtlSeconds : 120;
             RandomScaleTries = settings.RandomScaleTries > 0 ? settings.RandomScaleTries : 10;
+            ShowClock = settings.ShowTiledClock;
+            ClockCorner = NormalizeClockCorner(settings.TiledClockCorner);
 
             if (!string.IsNullOrWhiteSpace(DirectoryPath) && Directory.Exists(DirectoryPath))
             {
@@ -319,7 +334,7 @@ namespace SimpleImageSlideShow.Components.Pages
             // B: 小さい画像は原寸未満にしない → rImg が範囲内なら下限を rImg まで引き上げ
             if (rImg <= ShrinkGuardThreshold) lo = Math.Max(lo, rImg);
             var rand = lo < hi ? lo + Random.Shared.NextDouble() * (hi - lo) : lo;
-            if (!TryPlaceLongEdgeBasedNoUpscale(origW, origH, imagePath, lo, hi, rand, out var item, avoidClock: true))
+            if (!TryPlaceLongEdgeBasedNoUpscale(origW, origH, imagePath, lo, hi, rand, out var item, avoidClock: ShowClock))
             {
                 return null;
             }
@@ -363,7 +378,8 @@ namespace SimpleImageSlideShow.Components.Pages
 
                 // try without removal first (avoid clock area) with multiple random scales
                 // attempt initial chosen scale first
-                if (TryPlace(reqRows, reqCols, out var r0, out var c0, avoidClock: true))
+                var avoidClock = ShowClock;
+                if (TryPlace(reqRows, reqCols, out var r0, out var c0, avoidClock: avoidClock))
                 {
                     var item0 = new TiledItem
                     {
@@ -397,7 +413,7 @@ namespace SimpleImageSlideShow.Components.Pages
                     var (swD, shD) = ComputeViewportLongEdgeTargetNoUpscale(origW, origH, rtry, clampToGrid: true);
                     int reqColsD = Math.Max(1, (int)Math.Ceiling(swD / TileW));
                     int reqRowsD = Math.Max(1, (int)Math.Ceiling(shD / TileH));
-                    if (reqColsD <= Cols && reqRowsD <= Rows && TryPlace(reqRowsD, reqColsD, out var rD, out var cD, avoidClock: true))
+                    if (reqColsD <= Cols && reqRowsD <= Rows && TryPlace(reqRowsD, reqColsD, out var rD, out var cD, avoidClock: avoidClock))
                     {
                         var itemD = new TiledItem
                         {
@@ -426,7 +442,7 @@ namespace SimpleImageSlideShow.Components.Pages
                 }
 
                 // simulate FIFO removals on a copy of the occupancy grid to find minimal removals (avoid clock area)
-                if (!TryComputeFifoRemovalForPlacement(reqRows, reqCols, out int removeCount, out int rr, out int cc, avoidClock: true))
+                if (!TryComputeFifoRemovalForPlacement(reqRows, reqCols, out int removeCount, out int rr, out int cc, avoidClock: avoidClock))
                 {
                     // try again allowing clock area as last resort
                     if (!TryComputeFifoRemovalForPlacement(reqRows, reqCols, out removeCount, out rr, out cc, avoidClock: false))
@@ -865,6 +881,35 @@ namespace SimpleImageSlideShow.Components.Pages
             }
         }
 
+        private void OnClockToggleChanged(ChangeEventArgs e)
+        {
+            var show = ShowClock;
+            if (e.Value is bool b)
+            {
+                show = b;
+            }
+            else if (e.Value is string s && bool.TryParse(s, out var parsed))
+            {
+                show = parsed;
+            }
+
+            if (ShowClock == show) return;
+            ShowClock = show;
+            ComputeClockReservedCells();
+            UpdateClockOverlap();
+            StateHasChanged();
+        }
+
+        private void OnClockCornerChanged(ChangeEventArgs e)
+        {
+            var next = NormalizeClockCorner(e.Value?.ToString());
+            if (string.Equals(next, ClockCorner, StringComparison.Ordinal)) return;
+            ClockCorner = next;
+            ComputeClockReservedCells();
+            UpdateClockOverlap();
+            StateHasChanged();
+        }
+
         private async Task OnVolumeInput(ChangeEventArgs e)
         {
             if (e.Value is string s && double.TryParse(s, NumberStyles.Number, CultureInfo.InvariantCulture, out var v))
@@ -888,6 +933,8 @@ namespace SimpleImageSlideShow.Components.Pages
             settings.TiledReuseTtlSeconds = ReuseTtlSeconds;
             settings.RandomScaleTries = RandomScaleTries;
             settings.AudioVolumePercent = AudioVolumePercent;
+            settings.ShowTiledClock = ShowClock;
+            settings.TiledClockCorner = ClockCorner;
             settings.WindowDisplayMode = IsFullScreen ? "FullScreen" : "Windowed";
             // keep panel size fixed; stop persisting size
             await SettingsService.SaveAsync(settings);
@@ -1162,7 +1209,8 @@ namespace SimpleImageSlideShow.Components.Pages
                 int reqRows = Math.Max(1, (int)Math.Ceiling(sh / TileH));
                 if (reqCols > Cols || reqRows > Rows) continue;
 
-                if (TryPlaceSim(reqRows, reqCols, occSim, out var r0, out var c0, avoidClock: true))
+                var avoidClock = ShowClock;
+                if (TryPlaceSim(reqRows, reqCols, occSim, out var r0, out var c0, avoidClock: avoidClock))
                 {
                     return new PlannedStep
                     {
@@ -1187,7 +1235,7 @@ namespace SimpleImageSlideShow.Components.Pages
                     var (swD, shD) = ComputeViewportLongEdgeTargetNoUpscale(origW, origH, rtry, clampToGrid: true);
                     int reqColsD = Math.Max(1, (int)Math.Ceiling(swD / TileW));
                     int reqRowsD = Math.Max(1, (int)Math.Ceiling(shD / TileH));
-                    if (reqColsD <= Cols && reqRowsD <= Rows && TryPlaceSim(reqRowsD, reqColsD, occSim, out var rD, out var cD, avoidClock: true))
+                    if (reqColsD <= Cols && reqRowsD <= Rows && TryPlaceSim(reqRowsD, reqColsD, occSim, out var rD, out var cD, avoidClock: avoidClock))
                     {
                         return new PlannedStep
                         {
@@ -1206,7 +1254,7 @@ namespace SimpleImageSlideShow.Components.Pages
                     }
                 }
 
-                if (!TryComputeFifoRemovalForPlacementSim(reqRows, reqCols, occSim, simItems, out int removeCount, out int rr, out int cc, avoidClock: true))
+                if (!TryComputeFifoRemovalForPlacementSim(reqRows, reqCols, occSim, simItems, out int removeCount, out int rr, out int cc, avoidClock: avoidClock))
                 {
                     if (!TryComputeFifoRemovalForPlacementSim(reqRows, reqCols, occSim, simItems, out removeCount, out rr, out cc, avoidClock: false))
                     {
@@ -1404,17 +1452,27 @@ namespace SimpleImageSlideShow.Components.Pages
 
         private void ComputeClockReservedCells()
         {
-            if (Rows <= 0 || Cols <= 0)
+            if (Rows <= 0 || Cols <= 0 || !ShowClock)
             {
-                ClockCells = null; return;
+                ClockCells = null;
+                ClockOverlapped = false;
+                return;
             }
             ClockCells = new bool[Rows, Cols];
 
+            var normalizedCorner = NormalizeClockCorner(ClockCorner);
+            bool isLeft = normalizedCorner is ClockCornerTopLeft or ClockCornerBottomLeft;
+            bool isTop = normalizedCorner is ClockCornerTopLeft or ClockCornerTopRight;
+
             // Clock rectangle in viewport px
-            double cx1 = ClockMarginLeft;
-            double cy2 = ViewportH - ClockMarginBottom;
-            double cx2 = cx1 + ClockReservedWidth;
-            double cy1 = cy2 - ClockReservedHeight;
+            double width = Math.Min(ClockReservedWidth, Math.Max(0, ViewportW));
+            double height = Math.Min(ClockReservedHeight, Math.Max(0, ViewportH));
+            double cx1 = isLeft ? ClockMarginHorizontal : Math.Max(ClockMarginHorizontal, ViewportW - ClockMarginHorizontal - width);
+            double cy1 = isTop ? ClockMarginVertical : Math.Max(ClockMarginVertical, ViewportH - ClockMarginVertical - height);
+            cx1 = Math.Clamp(cx1, 0, Math.Max(0, ViewportW - width));
+            cy1 = Math.Clamp(cy1, 0, Math.Max(0, ViewportH - height));
+            double cx2 = cx1 + width;
+            double cy2 = cy1 + height;
 
             // Grid rectangle
             double gx1 = OffsetX;
@@ -1440,11 +1498,11 @@ namespace SimpleImageSlideShow.Components.Pages
         }
 
         private bool IsClockCell(int r, int c)
-            => ClockCells is not null && r >= 0 && r < Rows && c >= 0 && c < Cols && ClockCells[r, c];
+            => ShowClock && ClockCells is not null && r >= 0 && r < Rows && c >= 0 && c < Cols && ClockCells[r, c];
 
         private bool IsOverlappingClock(int row, int col, int rowSpan, int colSpan)
         {
-            if (ClockCells is null) return false;
+            if (!ShowClock || ClockCells is null) return false;
             for (int r = row; r < row + rowSpan; r++)
                 for (int c = col; c < col + colSpan; c++)
                     if (IsClockCell(r, c)) return true;
@@ -1453,12 +1511,29 @@ namespace SimpleImageSlideShow.Components.Pages
 
         private void UpdateClockOverlap()
         {
-            if (Occupied is null || ClockCells is null) { ClockOverlapped = false; return; }
+            if (!ShowClock || Occupied is null || ClockCells is null) { ClockOverlapped = false; return; }
             bool any = false;
             for (int r = 0; r < Rows && !any; r++)
                 for (int c = 0; c < Cols && !any; c++)
                     if (ClockCells[r, c] && Occupied[r, c]) any = true;
             ClockOverlapped = any;
         }
+
+        private static string NormalizeClockCorner(string? corner)
+        {
+            if (string.IsNullOrWhiteSpace(corner)) return ClockCornerBottomLeft;
+            if (corner.Equals(ClockCornerTopLeft, StringComparison.OrdinalIgnoreCase)) return ClockCornerTopLeft;
+            if (corner.Equals(ClockCornerTopRight, StringComparison.OrdinalIgnoreCase)) return ClockCornerTopRight;
+            if (corner.Equals(ClockCornerBottomRight, StringComparison.OrdinalIgnoreCase)) return ClockCornerBottomRight;
+            return ClockCornerBottomLeft;
+        }
+
+        private string ClockCornerCssClass => NormalizeClockCorner(ClockCorner) switch
+        {
+            ClockCornerTopLeft => "top-left",
+            ClockCornerTopRight => "top-right",
+            ClockCornerBottomRight => "bottom-right",
+            _ => "bottom-left"
+        };
     }
 }
