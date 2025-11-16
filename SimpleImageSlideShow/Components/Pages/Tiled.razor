@@ -35,7 +35,7 @@
                     </select>
                     <div class="mt-1">
                         <label class="form-label">Scale: @string.Format("{0:P0}", ClockScale)</label>
-                        <input type="range" min="50" max="200" step="5" value="@((int)(ClockScale * 100))" @oninput="OnClockScaleInput" />
+                        <input type="range" min="50" max="500" step="5" value="@((int)(ClockScale * 100))" @oninput="OnClockScaleInput" />
                     </div>
                 }
             </div>

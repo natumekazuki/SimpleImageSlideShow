@@ -943,7 +943,7 @@ namespace SimpleImageSlideShow.Components.Pages
         {
             if (e.Value is string s && double.TryParse(s, NumberStyles.Number, CultureInfo.InvariantCulture, out var v))
             {
-                var nextScale = Math.Clamp(v / 100.0, 0.5, 2.0);
+                var nextScale = Math.Clamp(v / 100.0, 0.5, 5.0);
                 if (Math.Abs(nextScale - ClockScale) < 0.0001) return;
                 ClockScale = nextScale;
                 ComputeClockReservedCells();
