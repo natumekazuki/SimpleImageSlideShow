@@ -33,6 +33,10 @@
                 </div>
                 @if (ShowClock)
                 {
+                    <div class="form-check form-switch mt-1">
+                        <input class="form-check-input" type="checkbox" role="switch" checked="@AvoidClockOverlap" @onchange="OnClockAvoidOverlapChanged" />
+                        <label class="form-check-label">Avoid overlap</label>
+                    </div>
                     <select class="form-select form-select-sm mt-1" @onchange="OnClockCornerChanged">
                         @foreach (var option in ClockCornerChoices)
                         {

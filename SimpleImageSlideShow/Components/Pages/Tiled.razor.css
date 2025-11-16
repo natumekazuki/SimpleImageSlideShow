@@ -1,8 +1,8 @@
 /* Reuse control-panel styles from app.css; here adjust if needed */
 
 .control-panel .panel-body {
-    width: 560px;   /* larger settings panel for tiled mode */
-    height: 260px;
+    width: auto;   /* larger settings panel for tiled mode */
+    height: auto;
 }
 
 .control-panel input[type="range"] {

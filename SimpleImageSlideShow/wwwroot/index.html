@@ -34,6 +34,10 @@
         return { dispose: function(){ window.removeEventListener('resize', h); } };
       };
 
+      window.app.getViewportSize = function(){
+        return { width: window.innerWidth, height: window.innerHeight };
+      };
+
       window.app.enablePanelInteraction = function(panelId, dotnetRef){
         var panel = document.getElementById(panelId);
         if(!panel) return;

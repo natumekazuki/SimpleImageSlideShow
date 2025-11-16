@@ -49,6 +49,8 @@ namespace SimpleImageSlideShow.Components.Pages
             public string? AudioSrc { get; init; }
         }
 
+        private readonly record struct ViewportSize(double Width, double Height);
+
         private List<TiledItem> Items { get; set; } = [];
         private HashSet<string> UsedPaths { get; } = new(StringComparer.OrdinalIgnoreCase);
 
@@ -104,6 +106,7 @@ namespace SimpleImageSlideShow.Components.Pages
             (ClockCornerCenter, "Center")
         };
         private bool ShowClock { get; set; } = true;
+        private bool AvoidClockOverlap { get; set; } = true;
         private string ClockCorner { get; set; } = ClockCornerBottomLeft;
         private double ClockScale { get; set; } = 1.0;
         private bool[,]? ClockCells;
@@ -111,6 +114,8 @@ namespace SimpleImageSlideShow.Components.Pages
         private string ClockTime = "--:--";
         private string ClockDate = "--/--(-)";
         private Timer? _clockTimer;
+        private CancellationTokenSource? _clockLayoutUpdateCts;
+        private static readonly TimeSpan ClockLayoutDebounceDelay = TimeSpan.FromMilliseconds(150);
 
         private CancellationTokenSource? _cts;
         private Task? _loopTask;
@@ -178,6 +183,7 @@ namespace SimpleImageSlideShow.Components.Pages
             ReuseTtlSeconds = settings.TiledReuseTtlSeconds > 0 ? settings.TiledReuseTtlSeconds : 120;
             RandomScaleTries = settings.RandomScaleTries > 0 ? settings.RandomScaleTries : 10;
             ShowClock = settings.ShowTiledClock;
+            AvoidClockOverlap = settings.AvoidTiledClockOverlap;
             ClockCorner = NormalizeClockCorner(settings.TiledClockCorner);
             ClockScale = Math.Clamp(settings.TiledClockScale, 0.5, 2.0);
 
@@ -216,6 +222,18 @@ namespace SimpleImageSlideShow.Components.Pages
             ViewportH = Math.Max(1, h);
             RecomputeGrid();
             await InvokeAsync(StateHasChanged);
+        }
+
+        private async Task RefreshViewportAsync()
+        {
+            try
+            {
+                var viewport = await JS.InvokeAsync<ViewportSize>("window.app.getViewportSize");
+                await OnResize((int)Math.Round(viewport.Width), (int)Math.Round(viewport.Height));
+            }
+            catch
+            {
+            }
         }
 
         private void RecomputeGrid()
@@ -347,7 +365,7 @@ namespace SimpleImageSlideShow.Components.Pages
             // B: 小さい画像は原寸未満にしない → rImg が範囲内なら下限を rImg まで引き上げ
             if (rImg <= ShrinkGuardThreshold) lo = Math.Max(lo, rImg);
             var rand = lo < hi ? lo + Random.Shared.NextDouble() * (hi - lo) : lo;
-            if (!TryPlaceLongEdgeBasedNoUpscale(origW, origH, imagePath, lo, hi, rand, out var item, avoidClock: ShowClock))
+            if (!TryPlaceLongEdgeBasedNoUpscale(origW, origH, imagePath, lo, hi, rand, out var item, avoidClock: ShowClock && AvoidClockOverlap))
             {
                 return null;
             }
@@ -391,7 +409,7 @@ namespace SimpleImageSlideShow.Components.Pages
 
                 // try without removal first (avoid clock area) with multiple random scales
                 // attempt initial chosen scale first
-                var avoidClock = ShowClock;
+                var avoidClock = ShowClock && AvoidClockOverlap;
                 if (TryPlace(reqRows, reqCols, out var r0, out var c0, avoidClock: avoidClock))
                 {
                     var item0 = new TiledItem
@@ -805,7 +823,7 @@ namespace SimpleImageSlideShow.Components.Pages
 
         private void RemoveClockOverlaps()
         {
-            if (!ShowClock || ClockCells is null || Occupied is null) return;
+            if (!AvoidClockOverlap || !ShowClock || ClockCells is null || Occupied is null) return;
 
             var removedAny = false;
             foreach (var item in Items.ToList())
@@ -947,11 +965,24 @@ namespace SimpleImageSlideShow.Components.Pages
 
             if (ShowClock == show) return;
             ShowClock = show;
-            ComputeClockReservedCells();
-            UpdateClockOverlap();
-            RemoveClockOverlaps();
-            InvalidatePlan();
-            StateHasChanged();
+            RefreshClockLayout(immediate: true);
+        }
+
+        private void OnClockAvoidOverlapChanged(ChangeEventArgs e)
+        {
+            var avoid = AvoidClockOverlap;
+            if (e.Value is bool b)
+            {
+                avoid = b;
+            }
+            else if (e.Value is string s && bool.TryParse(s, out var parsed))
+            {
+                avoid = parsed;
+            }
+
+            if (AvoidClockOverlap == avoid) return;
+            AvoidClockOverlap = avoid;
+            RefreshClockLayout(immediate: true);
         }
 
         private void OnClockCornerChanged(ChangeEventArgs e)
@@ -959,11 +990,7 @@ namespace SimpleImageSlideShow.Components.Pages
             var next = NormalizeClockCorner(e.Value?.ToString());
             if (string.Equals(next, ClockCorner, StringComparison.Ordinal)) return;
             ClockCorner = next;
-            ComputeClockReservedCells();
-            UpdateClockOverlap();
-            RemoveClockOverlaps();
-            InvalidatePlan();
-            StateHasChanged();
+            RefreshClockLayout(immediate: true);
         }
 
         private void OnClockScaleInput(ChangeEventArgs e)
@@ -973,12 +1000,78 @@ namespace SimpleImageSlideShow.Components.Pages
                 var nextScale = Math.Clamp(v / 100.0, 0.5, 5.0);
                 if (Math.Abs(nextScale - ClockScale) < 0.0001) return;
                 ClockScale = nextScale;
+                RefreshClockLayout(immediate: false);
+            }
+        }
+
+        private void RefreshClockLayout(bool immediate)
+        {
+            if (immediate)
+            {
+                CancelClockLayoutUpdate();
                 ComputeClockReservedCells();
                 UpdateClockOverlap();
                 RemoveClockOverlaps();
                 InvalidatePlan();
                 StateHasChanged();
             }
+            else
+            {
+                StateHasChanged();
+                ScheduleClockLayoutUpdate();
+            }
+        }
+
+        private void ScheduleClockLayoutUpdate()
+        {
+            var previous = _clockLayoutUpdateCts;
+            var nextCts = new CancellationTokenSource();
+            _clockLayoutUpdateCts = nextCts;
+
+            if (previous is not null)
+            {
+                try { previous.Cancel(); } catch { }
+                previous.Dispose();
+            }
+
+            _ = DebouncedClockLayoutUpdateAsync(nextCts);
+        }
+
+        private async Task DebouncedClockLayoutUpdateAsync(CancellationTokenSource cts)
+        {
+            try
+            {
+                await Task.Delay(ClockLayoutDebounceDelay, cts.Token);
+                if (cts.IsCancellationRequested) return;
+                await InvokeAsync(() =>
+                {
+                    if (cts.IsCancellationRequested) return;
+                    ComputeClockReservedCells();
+                    UpdateClockOverlap();
+                    RemoveClockOverlaps();
+                    InvalidatePlan();
+                    StateHasChanged();
+                });
+            }
+            catch (TaskCanceledException) { }
+            catch { }
+            finally
+            {
+                if (_clockLayoutUpdateCts == cts)
+                {
+                    _clockLayoutUpdateCts = null;
+                }
+                cts.Dispose();
+            }
+        }
+
+        private void CancelClockLayoutUpdate()
+        {
+            var cts = _clockLayoutUpdateCts;
+            if (cts is null) return;
+            _clockLayoutUpdateCts = null;
+            try { cts.Cancel(); } catch { }
+            cts.Dispose();
         }
 
         private async Task OnVolumeInput(ChangeEventArgs e)
@@ -1006,6 +1099,7 @@ namespace SimpleImageSlideShow.Components.Pages
             settings.RandomScaleTries = RandomScaleTries;
             settings.AudioVolumePercent = AudioVolumePercent;
             settings.ShowTiledClock = ShowClock;
+            settings.AvoidTiledClockOverlap = AvoidClockOverlap;
             settings.TiledClockCorner = ClockCorner;
             settings.TiledClockScale = ClockScale;
             settings.WindowDisplayMode = IsFullScreen ? "FullScreen" : "Windowed";
@@ -1100,13 +1194,15 @@ namespace SimpleImageSlideShow.Components.Pages
             finally
             {
                 IsWindowModeChanging = false;
+                await RefreshViewportAsync();
                 await InvokeAsync(StateHasChanged);
             }
         }
 
-        private void OnWindowModeChanged(object? sender, WindowDisplayModeChangedEventArgs e)
+        private async void OnWindowModeChanged(object? sender, WindowDisplayModeChangedEventArgs e)
         {
             UpdateWindowMode(e.Mode);
+            await RefreshViewportAsync();
         }
 
         private void UpdateWindowMode(WindowDisplayMode mode, bool force = false)
@@ -1283,7 +1379,7 @@ namespace SimpleImageSlideShow.Components.Pages
                 int reqRows = Math.Max(1, (int)Math.Ceiling(sh / TileH));
                 if (reqCols > Cols || reqRows > Rows) continue;
 
-                var avoidClock = ShowClock;
+                var avoidClock = ShowClock && AvoidClockOverlap;
                 if (TryPlaceSim(reqRows, reqCols, occSim, out var r0, out var c0, avoidClock: avoidClock))
                 {
                     return new PlannedStep
@@ -1472,6 +1568,7 @@ namespace SimpleImageSlideShow.Components.Pages
             try { if (_resizeObj is not null) await _resizeObj.InvokeVoidAsync("dispose"); } catch { }
             try { _selfRef?.Dispose(); } catch { }
             try { _clockTimer?.Dispose(); } catch { }
+            CancelClockLayoutUpdate();
             WindowService.ModeChanged -= OnWindowModeChanged;
             ImageService.Dispose();
         }
