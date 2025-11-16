@@ -1,6 +1,10 @@
-﻿html, body {
+﻿:root {
+    --app-background-color: #d3d3d3;
+}
+
+html, body {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    background-color: lightgray;
+    background-color: var(--app-background-color);
     margin: 0;
     padding: 0;
     height: 100%;

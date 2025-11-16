@@ -1,0 +1,34 @@
+@using System.Globalization
+@using Microsoft.AspNetCore.Components.Web
+
+<div class="rgb-picker" role="group" aria-label="@PickerAriaLabel">
+    @foreach (var channel in Channels)
+    {
+        var value = GetChannelValue(channel.Key);
+        <div class="channel-control">
+            <label>
+                <span class="channel-label">@channel.Label</span>
+                <span class="channel-value">@value</span>
+            </label>
+            <input type="range"
+                   min="0"
+                   max="255"
+                   value="@value"
+                   aria-label="@channel.AriaLabel"
+                   @oninput="@(e => OnChannelInput(channel.Key, e))" />
+        </div>
+    }
+
+    <div class="hex-input-wrapper">
+        <label class="channel-label" for="@_hexInputId">Hex</label>
+        <input id="@_hexInputId"
+               type="text"
+               class="hex-input"
+               value="@_hexValue"
+               maxlength="7"
+               spellcheck="false"
+               @onchange="OnHexChanged"
+               aria-label="Hex color value" />
+        <span class="preview" style="background-color:@_hexValue;" aria-hidden="true"></span>
+    </div>
+</div>

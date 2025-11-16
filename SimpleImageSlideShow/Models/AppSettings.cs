@@ -21,5 +21,7 @@ namespace SimpleImageSlideShow.Models
         public uint RandomScaleTries { get; set; } = 10;      // number of tries to find a random scale that fits
 
         public double AudioVolumePercent { get; set; } = 0;    // 0-100 slider, start muted
+
+        public string BackgroundColor { get; set; } = "#D3D3D3";
     }
 }

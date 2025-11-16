@@ -57,6 +57,7 @@ namespace SimpleImageSlideShow.Components.Pages
         private double AudioVolume => Math.Clamp(AudioVolumePercent, 0, 100) / 100.0;
         private double MinScale { get; set; } = 0.5;
         private double MaxScale { get; set; } = 1.0;
+        private string BackgroundColor { get; set; } = DefaultBackgroundColor;
         private string? DirectoryPath { get; set; }
         private bool IsFullScreen { get; set; }
         private bool IsWindowModeChanging { get; set; }
@@ -142,6 +143,9 @@ namespace SimpleImageSlideShow.Components.Pages
         private readonly Dictionary<string, DateTime> _cooldown = new(StringComparer.OrdinalIgnoreCase);
         private readonly PriorityQueue<string, long> _cooldownQueue = new();
         private int ReuseTtlSeconds = 120;
+        private const string DefaultBackgroundColor = "#D3D3D3";
+
+        private string BackgroundStyle => $"--app-background-color:{BackgroundColor};background-color:var(--app-background-color);";
 
         private static async Task<string> SelectDirectoryAsync()
         {
@@ -168,6 +172,7 @@ namespace SimpleImageSlideShow.Components.Pages
             MaxScale = Math.Clamp(settings.TiledMaxScale, 0.1, 1.0);
             if (MaxScale < MinScale) MaxScale = MinScale;
             DirectoryPath = settings.DirectoryPath;
+            BackgroundColor = NormalizeBackgroundColor(settings.BackgroundColor);
             TiledCols = settings.TiledCols > 0 ? settings.TiledCols : 6;
             MinTilePx = settings.MinTilePx > 0 ? settings.MinTilePx : 128;
             ReuseTtlSeconds = settings.TiledReuseTtlSeconds > 0 ? settings.TiledReuseTtlSeconds : 120;
@@ -884,6 +889,22 @@ namespace SimpleImageSlideShow.Components.Pages
             }
         }
 
+        private void OnBackgroundColorSelected(string value)
+        {
+            var next = NormalizeBackgroundColor(value);
+            if (!string.Equals(next, BackgroundColor, StringComparison.OrdinalIgnoreCase))
+            {
+                BackgroundColor = next;
+            }
+        }
+
+        private static string NormalizeBackgroundColor(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return DefaultBackgroundColor;
+            var trimmed = value.Trim();
+            return trimmed.StartsWith('#') ? trimmed : $"#{trimmed}";
+        }
+
         private void OnColsInput(ChangeEventArgs e)
         {
             if (e.Value is string s && int.TryParse(s, out var v))
@@ -978,6 +999,7 @@ namespace SimpleImageSlideShow.Components.Pages
             settings.TiledMaxScale = MaxScale;
             settings.DirectoryPath = DirectoryPath;
             settings.LastMode = "Tiled";
+            settings.BackgroundColor = BackgroundColor;
             settings.TiledCols = TiledCols;
             settings.MinTilePx = MinTilePx;
             settings.TiledReuseTtlSeconds = ReuseTtlSeconds;
@@ -1033,6 +1055,7 @@ namespace SimpleImageSlideShow.Components.Pages
             WebViewHost.MapImagesFolder(directoryPath);
             var settings = await SettingsService.LoadAsync();
             settings.DirectoryPath = DirectoryPath;
+            settings.BackgroundColor = BackgroundColor;
             settings.WindowDisplayMode = IsFullScreen ? "FullScreen" : "Windowed";
             await SettingsService.SaveAsync(settings);
 

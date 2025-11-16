@@ -1,0 +1,51 @@
+.rgb-picker {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 2px 0;
+    min-width: 240px;
+}
+
+.rgb-picker .channel-control {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.rgb-picker .channel-control label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+}
+
+.rgb-picker .channel-label {
+    font-weight: 600;
+}
+
+.rgb-picker .channel-value {
+    font-family: Consolas, "Fira Code", monospace;
+}
+
+.rgb-picker input[type="range"] {
+    width: 100%;
+}
+
+.rgb-picker .hex-input-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.rgb-picker .hex-input {
+    width: 90px;
+    font-family: Consolas, "Fira Code", monospace;
+    font-size: 0.85rem;
+    padding: 4px 6px;
+}
+
+.rgb-picker .preview {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    border: 1px solid rgba(0, 0, 0, 0.25);
+}
