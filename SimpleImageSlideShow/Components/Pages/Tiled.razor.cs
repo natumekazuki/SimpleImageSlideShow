@@ -87,14 +87,20 @@ namespace SimpleImageSlideShow.Components.Pages
         private const double ClockMarginVertical = 12;   // px
         private const string ClockCornerTopLeft = "TopLeft";
         private const string ClockCornerTopRight = "TopRight";
+        private const string ClockCornerTopCenter = "TopCenter";
         private const string ClockCornerBottomLeft = "BottomLeft";
         private const string ClockCornerBottomRight = "BottomRight";
+        private const string ClockCornerBottomCenter = "BottomCenter";
+        private const string ClockCornerCenter = "Center";
         private static readonly (string Value, string Label)[] ClockCornerChoices = new[]
         {
             (ClockCornerTopLeft, "Top Left"),
             (ClockCornerTopRight, "Top Right"),
+            (ClockCornerTopCenter, "Top Center"),
             (ClockCornerBottomLeft, "Bottom Left"),
-            (ClockCornerBottomRight, "Bottom Right")
+            (ClockCornerBottomRight, "Bottom Right"),
+            (ClockCornerBottomCenter, "Bottom Center"),
+            (ClockCornerCenter, "Center")
         };
         private bool ShowClock { get; set; } = true;
         private string ClockCorner { get; set; } = ClockCornerBottomLeft;
@@ -1510,14 +1516,24 @@ namespace SimpleImageSlideShow.Components.Pages
             ClockCells = new bool[Rows, Cols];
 
             var normalizedCorner = NormalizeClockCorner(ClockCorner);
-            bool isLeft = normalizedCorner is ClockCornerTopLeft or ClockCornerBottomLeft;
-            bool isTop = normalizedCorner is ClockCornerTopLeft or ClockCornerTopRight;
 
             // Clock rectangle in viewport px
             double width = Math.Min(ClockWidth, Math.Max(0, ViewportW));
             double height = Math.Min(ClockHeight, Math.Max(0, ViewportH));
-            double cx1 = isLeft ? ClockMarginHorizontal : Math.Max(ClockMarginHorizontal, ViewportW - ClockMarginHorizontal - width);
-            double cy1 = isTop ? ClockMarginVertical : Math.Max(ClockMarginVertical, ViewportH - ClockMarginVertical - height);
+            double cx1 = normalizedCorner switch
+            {
+                ClockCornerTopLeft or ClockCornerBottomLeft => ClockMarginHorizontal,
+                ClockCornerTopRight or ClockCornerBottomRight => Math.Max(ClockMarginHorizontal, ViewportW - ClockMarginHorizontal - width),
+                ClockCornerTopCenter or ClockCornerBottomCenter or ClockCornerCenter => Math.Max(ClockMarginHorizontal, (ViewportW - width) / 2.0),
+                _ => ClockMarginHorizontal
+            };
+            double cy1 = normalizedCorner switch
+            {
+                ClockCornerTopLeft or ClockCornerTopRight or ClockCornerTopCenter => ClockMarginVertical,
+                ClockCornerBottomLeft or ClockCornerBottomRight or ClockCornerBottomCenter => Math.Max(ClockMarginVertical, ViewportH - ClockMarginVertical - height),
+                ClockCornerCenter => Math.Max(ClockMarginVertical, (ViewportH - height) / 2.0),
+                _ => ClockMarginVertical
+            };
             cx1 = Math.Clamp(cx1, 0, Math.Max(0, ViewportW - width));
             cy1 = Math.Clamp(cy1, 0, Math.Max(0, ViewportH - height));
             double cx2 = cx1 + width;
@@ -1573,7 +1589,10 @@ namespace SimpleImageSlideShow.Components.Pages
             if (string.IsNullOrWhiteSpace(corner)) return ClockCornerBottomLeft;
             if (corner.Equals(ClockCornerTopLeft, StringComparison.OrdinalIgnoreCase)) return ClockCornerTopLeft;
             if (corner.Equals(ClockCornerTopRight, StringComparison.OrdinalIgnoreCase)) return ClockCornerTopRight;
+            if (corner.Equals(ClockCornerTopCenter, StringComparison.OrdinalIgnoreCase)) return ClockCornerTopCenter;
             if (corner.Equals(ClockCornerBottomRight, StringComparison.OrdinalIgnoreCase)) return ClockCornerBottomRight;
+            if (corner.Equals(ClockCornerBottomCenter, StringComparison.OrdinalIgnoreCase)) return ClockCornerBottomCenter;
+            if (corner.Equals(ClockCornerCenter, StringComparison.OrdinalIgnoreCase)) return ClockCornerCenter;
             return ClockCornerBottomLeft;
         }
 
@@ -1581,7 +1600,10 @@ namespace SimpleImageSlideShow.Components.Pages
         {
             ClockCornerTopLeft => "top-left",
             ClockCornerTopRight => "top-right",
+            ClockCornerTopCenter => "top-center",
             ClockCornerBottomRight => "bottom-right",
+            ClockCornerBottomCenter => "bottom-center",
+            ClockCornerCenter => "center",
             _ => "bottom-left"
         };
     }
