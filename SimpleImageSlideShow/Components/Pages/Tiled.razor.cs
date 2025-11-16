@@ -106,6 +106,7 @@ namespace SimpleImageSlideShow.Components.Pages
             (ClockCornerCenter, "Center")
         };
         private bool ShowClock { get; set; } = true;
+        private bool AvoidClockOverlap { get; set; } = true;
         private string ClockCorner { get; set; } = ClockCornerBottomLeft;
         private double ClockScale { get; set; } = 1.0;
         private bool[,]? ClockCells;
@@ -180,6 +181,7 @@ namespace SimpleImageSlideShow.Components.Pages
             ReuseTtlSeconds = settings.TiledReuseTtlSeconds > 0 ? settings.TiledReuseTtlSeconds : 120;
             RandomScaleTries = settings.RandomScaleTries > 0 ? settings.RandomScaleTries : 10;
             ShowClock = settings.ShowTiledClock;
+            AvoidClockOverlap = settings.AvoidTiledClockOverlap;
             ClockCorner = NormalizeClockCorner(settings.TiledClockCorner);
             ClockScale = Math.Clamp(settings.TiledClockScale, 0.5, 2.0);
 
@@ -361,7 +363,7 @@ namespace SimpleImageSlideShow.Components.Pages
             // B: 小さい画像は原寸未満にしない → rImg が範囲内なら下限を rImg まで引き上げ
             if (rImg <= ShrinkGuardThreshold) lo = Math.Max(lo, rImg);
             var rand = lo < hi ? lo + Random.Shared.NextDouble() * (hi - lo) : lo;
-            if (!TryPlaceLongEdgeBasedNoUpscale(origW, origH, imagePath, lo, hi, rand, out var item, avoidClock: ShowClock))
+            if (!TryPlaceLongEdgeBasedNoUpscale(origW, origH, imagePath, lo, hi, rand, out var item, avoidClock: ShowClock && AvoidClockOverlap))
             {
                 return null;
             }
@@ -405,7 +407,7 @@ namespace SimpleImageSlideShow.Components.Pages
 
                 // try without removal first (avoid clock area) with multiple random scales
                 // attempt initial chosen scale first
-                var avoidClock = ShowClock;
+                var avoidClock = ShowClock && AvoidClockOverlap;
                 if (TryPlace(reqRows, reqCols, out var r0, out var c0, avoidClock: avoidClock))
                 {
                     var item0 = new TiledItem
@@ -819,7 +821,7 @@ namespace SimpleImageSlideShow.Components.Pages
 
         private void RemoveClockOverlaps()
         {
-            if (!ShowClock || ClockCells is null || Occupied is null) return;
+            if (!AvoidClockOverlap || !ShowClock || ClockCells is null || Occupied is null) return;
 
             var removedAny = false;
             foreach (var item in Items.ToList())
@@ -968,6 +970,27 @@ namespace SimpleImageSlideShow.Components.Pages
             StateHasChanged();
         }
 
+        private void OnClockAvoidOverlapChanged(ChangeEventArgs e)
+        {
+            var avoid = AvoidClockOverlap;
+            if (e.Value is bool b)
+            {
+                avoid = b;
+            }
+            else if (e.Value is string s && bool.TryParse(s, out var parsed))
+            {
+                avoid = parsed;
+            }
+
+            if (AvoidClockOverlap == avoid) return;
+            AvoidClockOverlap = avoid;
+            ComputeClockReservedCells();
+            UpdateClockOverlap();
+            RemoveClockOverlaps();
+            InvalidatePlan();
+            StateHasChanged();
+        }
+
         private void OnClockCornerChanged(ChangeEventArgs e)
         {
             var next = NormalizeClockCorner(e.Value?.ToString());
@@ -1020,6 +1043,7 @@ namespace SimpleImageSlideShow.Components.Pages
             settings.RandomScaleTries = RandomScaleTries;
             settings.AudioVolumePercent = AudioVolumePercent;
             settings.ShowTiledClock = ShowClock;
+            settings.AvoidTiledClockOverlap = AvoidClockOverlap;
             settings.TiledClockCorner = ClockCorner;
             settings.TiledClockScale = ClockScale;
             settings.WindowDisplayMode = IsFullScreen ? "FullScreen" : "Windowed";
@@ -1299,7 +1323,7 @@ namespace SimpleImageSlideShow.Components.Pages
                 int reqRows = Math.Max(1, (int)Math.Ceiling(sh / TileH));
                 if (reqCols > Cols || reqRows > Rows) continue;
 
-                var avoidClock = ShowClock;
+                var avoidClock = ShowClock && AvoidClockOverlap;
                 if (TryPlaceSim(reqRows, reqCols, occSim, out var r0, out var c0, avoidClock: avoidClock))
                 {
                     return new PlannedStep

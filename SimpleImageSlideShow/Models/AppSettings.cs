@@ -17,6 +17,7 @@ namespace SimpleImageSlideShow.Models
         public bool ShowTiledClock { get; set; } = true;       // Toggle clock overlay
         public string TiledClockCorner { get; set; } = "BottomLeft"; // Clock corner selection
         public double TiledClockScale { get; set; } = 1.0;     // Clock scale multiplier
+        public bool AvoidTiledClockOverlap { get; set; } = true; // Keep images off the clock overlay
 
         public uint RandomScaleTries { get; set; } = 10;      // number of tries to find a random scale that fits
 
