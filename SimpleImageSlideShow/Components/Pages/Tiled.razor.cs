@@ -790,6 +790,29 @@ namespace SimpleImageSlideShow.Components.Pages
             UpdateClockOverlap();
         }
 
+        private void RemoveClockOverlaps()
+        {
+            if (!ShowClock || ClockCells is null || Occupied is null) return;
+
+            var removedAny = false;
+            foreach (var item in Items.ToList())
+            {
+                if (!IsOverlappingClock(item.Row, item.Col, item.RowSpan, item.ColSpan)) continue;
+
+                FillCells(item.Row, item.Col, item.RowSpan, item.ColSpan, false);
+                SetOwners(item, false);
+                Items.Remove(item);
+                UsedPaths.Remove(item.Path);
+                removedAny = true;
+            }
+
+            if (removedAny)
+            {
+                UpdateClockOverlap();
+                InvalidatePlan();
+            }
+        }
+
         private async Task<string> GetRandomUnusedPathAsync()
         {
             int tries = GetImageTryCount();
@@ -897,6 +920,8 @@ namespace SimpleImageSlideShow.Components.Pages
             ShowClock = show;
             ComputeClockReservedCells();
             UpdateClockOverlap();
+            RemoveClockOverlaps();
+            InvalidatePlan();
             StateHasChanged();
         }
 
@@ -907,6 +932,8 @@ namespace SimpleImageSlideShow.Components.Pages
             ClockCorner = next;
             ComputeClockReservedCells();
             UpdateClockOverlap();
+            RemoveClockOverlaps();
+            InvalidatePlan();
             StateHasChanged();
         }
 
