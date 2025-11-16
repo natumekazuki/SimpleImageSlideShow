@@ -44,8 +44,8 @@
 /* Clock overlay (corner selectable) */
 .clock-overlay {
     position: absolute;
-    width: 320px;   /* Keep in sync with code-side reserved area */
-    height: 140px;  /* Keep in sync with code-side reserved area */
+    width: var(--clock-width, 320px);
+    height: var(--clock-height, 140px);
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -84,11 +84,11 @@
 .clock-overlay.dim { opacity: 0.55; }
 
 .clock-time {
-    font-size: 80px;
+    font-size: calc(80px * var(--clock-scale, 1));
     line-height: 1.0;
 }
 
 .clock-date {
-    font-size: 24px;
+    font-size: calc(24px * var(--clock-scale, 1));
     line-height: 1.2;
 }

@@ -33,6 +33,10 @@
                             <option value="@option.Value" selected="@((ClockCorner == option.Value) ? "selected" : null)">@option.Label</option>
                         }
                     </select>
+                    <div class="mt-1">
+                        <label class="form-label">Scale: @string.Format("{0:P0}", ClockScale)</label>
+                        <input type="range" min="50" max="500" step="5" value="@((int)(ClockScale * 100))" @oninput="OnClockScaleInput" />
+                    </div>
                 }
             </div>
             <div>
@@ -80,7 +84,8 @@
 
     @if (ShowClock)
     {
-        <div id="clock-overlay" class="clock-overlay @ClockCornerCssClass @(ClockOverlapped ? "dim" : "bright")">
+        var clockStyle = $"--clock-width:{ClockWidth}px;--clock-height:{ClockHeight}px;--clock-scale:{ClockScale};";
+        <div id="clock-overlay" class="clock-overlay @ClockCornerCssClass @(ClockOverlapped ? "dim" : "bright")" style="@clockStyle">
             <div class="clock-time">@ClockTime</div>
             <div class="clock-date">@ClockDate</div>
         </div>

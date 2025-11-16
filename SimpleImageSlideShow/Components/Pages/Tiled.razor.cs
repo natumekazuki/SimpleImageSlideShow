@@ -81,8 +81,8 @@ namespace SimpleImageSlideShow.Components.Pages
         private TiledItem?[,]? Owners;
 
         // Clock overlay (reserved area in grid)
-        private const double ClockReservedWidth = 320;   // px (keep in sync with CSS)
-        private const double ClockReservedHeight = 140;  // px (keep in sync with CSS)
+        private const double ClockBaseWidth = 320;   // px (keep in sync with CSS)
+        private const double ClockBaseHeight = 140;  // px (keep in sync with CSS)
         private const double ClockMarginHorizontal = 12; // px
         private const double ClockMarginVertical = 12;   // px
         private const string ClockCornerTopLeft = "TopLeft";
@@ -98,6 +98,7 @@ namespace SimpleImageSlideShow.Components.Pages
         };
         private bool ShowClock { get; set; } = true;
         private string ClockCorner { get; set; } = ClockCornerBottomLeft;
+        private double ClockScale { get; set; } = 1.0;
         private bool[,]? ClockCells;
         private bool ClockOverlapped = false;
         private string ClockTime = "--:--";
@@ -167,6 +168,7 @@ namespace SimpleImageSlideShow.Components.Pages
             RandomScaleTries = settings.RandomScaleTries > 0 ? settings.RandomScaleTries : 10;
             ShowClock = settings.ShowTiledClock;
             ClockCorner = NormalizeClockCorner(settings.TiledClockCorner);
+            ClockScale = Math.Clamp(settings.TiledClockScale, 0.5, 2.0);
 
             if (!string.IsNullOrWhiteSpace(DirectoryPath) && Directory.Exists(DirectoryPath))
             {
@@ -937,6 +939,21 @@ namespace SimpleImageSlideShow.Components.Pages
             StateHasChanged();
         }
 
+        private void OnClockScaleInput(ChangeEventArgs e)
+        {
+            if (e.Value is string s && double.TryParse(s, NumberStyles.Number, CultureInfo.InvariantCulture, out var v))
+            {
+                var nextScale = Math.Clamp(v / 100.0, 0.5, 5.0);
+                if (Math.Abs(nextScale - ClockScale) < 0.0001) return;
+                ClockScale = nextScale;
+                ComputeClockReservedCells();
+                UpdateClockOverlap();
+                RemoveClockOverlaps();
+                InvalidatePlan();
+                StateHasChanged();
+            }
+        }
+
         private async Task OnVolumeInput(ChangeEventArgs e)
         {
             if (e.Value is string s && double.TryParse(s, NumberStyles.Number, CultureInfo.InvariantCulture, out var v))
@@ -962,6 +979,7 @@ namespace SimpleImageSlideShow.Components.Pages
             settings.AudioVolumePercent = AudioVolumePercent;
             settings.ShowTiledClock = ShowClock;
             settings.TiledClockCorner = ClockCorner;
+            settings.TiledClockScale = ClockScale;
             settings.WindowDisplayMode = IsFullScreen ? "FullScreen" : "Windowed";
             // keep panel size fixed; stop persisting size
             await SettingsService.SaveAsync(settings);
@@ -1477,6 +1495,10 @@ namespace SimpleImageSlideShow.Components.Pages
             ClockDate = $"{now:MM/dd}({dow})";
         }
 
+        private double ClockWidth => ClockBaseWidth * ClockScale;
+
+        private double ClockHeight => ClockBaseHeight * ClockScale;
+
         private void ComputeClockReservedCells()
         {
             if (Rows <= 0 || Cols <= 0 || !ShowClock)
@@ -1492,8 +1514,8 @@ namespace SimpleImageSlideShow.Components.Pages
             bool isTop = normalizedCorner is ClockCornerTopLeft or ClockCornerTopRight;
 
             // Clock rectangle in viewport px
-            double width = Math.Min(ClockReservedWidth, Math.Max(0, ViewportW));
-            double height = Math.Min(ClockReservedHeight, Math.Max(0, ViewportH));
+            double width = Math.Min(ClockWidth, Math.Max(0, ViewportW));
+            double height = Math.Min(ClockHeight, Math.Max(0, ViewportH));
             double cx1 = isLeft ? ClockMarginHorizontal : Math.Max(ClockMarginHorizontal, ViewportW - ClockMarginHorizontal - width);
             double cy1 = isTop ? ClockMarginVertical : Math.Max(ClockMarginVertical, ViewportH - ClockMarginVertical - height);
             cx1 = Math.Clamp(cx1, 0, Math.Max(0, ViewportW - width));

@@ -16,6 +16,7 @@ namespace SimpleImageSlideShow.Models
         public int TiledReuseTtlSeconds { get; set; } = 120;   // TTL to reuse an image in Tiled
         public bool ShowTiledClock { get; set; } = true;       // Toggle clock overlay
         public string TiledClockCorner { get; set; } = "BottomLeft"; // Clock corner selection
+        public double TiledClockScale { get; set; } = 1.0;     // Clock scale multiplier
 
         public uint RandomScaleTries { get; set; } = 10;      // number of tries to find a random scale that fits
 
