@@ -3,6 +3,7 @@ using Microsoft.Maui.Platform;
 using Microsoft.UI.Windowing;
 using SimpleImageSlideShow.Services;
 using System.Globalization;
+using System.Threading.Tasks;
 
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
@@ -50,16 +51,8 @@ namespace SimpleImageSlideShow.WinUI
                         var tb = appWindow.TitleBar;
                         if (tb is not null)
                         {
-                            var bg = ResolveTitleBarColor();
-                            var fg = bg;
-                            tb.BackgroundColor = bg;
-                            tb.InactiveBackgroundColor = bg;
-                            tb.ForegroundColor = fg;
-                            tb.InactiveForegroundColor = fg;
-                            tb.ButtonBackgroundColor = bg;
-                            tb.ButtonInactiveBackgroundColor = bg;
-                            tb.ButtonForegroundColor = fg;
-                            tb.ButtonInactiveForegroundColor = fg;
+                            ApplyTitleBarColor(tb, DefaultTitleBarColor);
+                            _ = ResolveAndApplyTitleBarColorAsync(nativeWindow, tb);
                         }
                     }
                     catch { }
@@ -69,18 +62,33 @@ namespace SimpleImageSlideShow.WinUI
 
         protected override MauiApp CreateMauiApp() => MauiProgram.CreateMauiApp();
 
-        private static Windows.UI.Color ResolveTitleBarColor()
+        private static async Task ResolveAndApplyTitleBarColorAsync(Microsoft.UI.Xaml.Window window, AppWindowTitleBar titleBar)
         {
             try
             {
                 var settingsService = new SettingsService();
-                var settings = settingsService.LoadAsync().GetAwaiter().GetResult();
-                return ParseColorOrDefault(settings?.BackgroundColor);
+                var settings = await settingsService.LoadAsync().ConfigureAwait(false);
+                var color = ParseColorOrDefault(settings?.BackgroundColor);
+
+                _ = window.DispatcherQueue.TryEnqueue(() => ApplyTitleBarColor(titleBar, color));
             }
             catch
             {
-                return DefaultTitleBarColor;
+                // ignore failures and keep default colors
             }
+        }
+
+        private static void ApplyTitleBarColor(AppWindowTitleBar tb, Windows.UI.Color color)
+        {
+            var fg = color;
+            tb.BackgroundColor = color;
+            tb.InactiveBackgroundColor = color;
+            tb.ForegroundColor = fg;
+            tb.InactiveForegroundColor = fg;
+            tb.ButtonBackgroundColor = color;
+            tb.ButtonInactiveBackgroundColor = color;
+            tb.ButtonForegroundColor = fg;
+            tb.ButtonInactiveForegroundColor = fg;
         }
 
         private static Windows.UI.Color ParseColorOrDefault(string? hex)
