@@ -41,11 +41,9 @@
     to { opacity: 0; }
 }
 
-/* Clock overlay (bottom-left fixed) */
+/* Clock overlay (corner selectable) */
 .clock-overlay {
     position: absolute;
-    left: 12px;
-    bottom: 12px;
     width: 320px;   /* Keep in sync with code-side reserved area */
     height: 140px;  /* Keep in sync with code-side reserved area */
     display: flex;
@@ -56,6 +54,30 @@
     user-select: none;
     pointer-events: none; /* Do not block interactions */
     z-index: 2; /* Above tiles */
+}
+
+.clock-overlay.top-left {
+    left: 12px;
+    top: 12px;
+}
+
+.clock-overlay.top-right {
+    right: 12px;
+    top: 12px;
+    align-items: flex-end;
+    text-align: right;
+}
+
+.clock-overlay.bottom-left {
+    left: 12px;
+    bottom: 12px;
+}
+
+.clock-overlay.bottom-right {
+    right: 12px;
+    bottom: 12px;
+    align-items: flex-end;
+    text-align: right;
 }
 
 .clock-overlay.bright { opacity: 0.95; }

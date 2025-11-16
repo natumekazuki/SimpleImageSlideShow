@@ -14,6 +14,8 @@ namespace SimpleImageSlideShow.Models
         public int TiledCols { get; set; } = 6;                // current-screen columns (square tiles)
         public int MinTilePx { get; set; } = 128;              // min tile width (px)
         public int TiledReuseTtlSeconds { get; set; } = 120;   // TTL to reuse an image in Tiled
+        public bool ShowTiledClock { get; set; } = true;       // Toggle clock overlay
+        public string TiledClockCorner { get; set; } = "BottomLeft"; // Clock corner selection
 
         public uint RandomScaleTries { get; set; } = 10;      // number of tries to find a random scale that fits
 
