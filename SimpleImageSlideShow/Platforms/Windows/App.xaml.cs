@@ -85,10 +85,6 @@ namespace SimpleImageSlideShow.WinUI
             tb.InactiveBackgroundColor = color;
             tb.ForegroundColor = fg;
             tb.InactiveForegroundColor = fg;
-            tb.ButtonBackgroundColor = color;
-            tb.ButtonInactiveBackgroundColor = color;
-            tb.ButtonForegroundColor = fg;
-            tb.ButtonInactiveForegroundColor = fg;
         }
 
         private static Windows.UI.Color ParseColorOrDefault(string? hex)
