@@ -57,6 +57,7 @@ namespace SimpleImageSlideShow.Components.Pages
         private uint DelaySeconds { get; set; } = 5;
         private double AudioVolumePercent { get; set; } = 0;
         private double AudioVolume => Math.Clamp(AudioVolumePercent, 0, 100) / 100.0;
+        private const double AudioSilenceEpsilon = 0.0001;
         private double MinScale { get; set; } = 0.5;
         private double MaxScale { get; set; } = 1.0;
         private string BackgroundColor { get; set; } = DefaultBackgroundColor;
@@ -1519,7 +1520,7 @@ namespace SimpleImageSlideShow.Components.Pages
         private async Task WaitForNextTickAsync(TiledItem? lastItem, CancellationToken token)
         {
             var delayTask = Task.Delay(TimeSpan.FromSeconds(Math.Max(1, DelaySeconds)), token);
-            if (lastItem?.AudioSrc is string audio && !string.IsNullOrWhiteSpace(audio))
+            if (lastItem?.AudioSrc is string audio && !string.IsNullOrWhiteSpace(audio) && AudioVolume > AudioSilenceEpsilon)
             {
                 var audioTask = PlayAudioAndWaitAsync(audio, token);
                 try
