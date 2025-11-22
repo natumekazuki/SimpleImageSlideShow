@@ -938,7 +938,7 @@ namespace SimpleImageSlideShow.Components.Pages
         {
             if (e.Value is string s && int.TryParse(s, out var v))
             {
-                MinTilePx = Math.Clamp(v, 64, 512);
+                MinTilePx = Math.Clamp(v, 1, 512);
                 RecomputeGrid();
                 StateHasChanged();
             }
