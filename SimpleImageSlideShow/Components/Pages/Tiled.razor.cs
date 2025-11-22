@@ -67,6 +67,7 @@ namespace SimpleImageSlideShow.Components.Pages
         private string HostName => WebViewHost.HostName;
         private int MinTilePx = 128; // 最小タイル幅（px）
         private int ColsMax => (int)Math.Max(1, Math.Floor(ViewportW / Math.Max(1, MinTilePx)));
+        private const int MaxPlacementCandidates = 200_000; // guard against extreme grids (e.g., 1px tiles)
         // Panel size is fixed in CSS for tiled mode; no persistence
 
         // Grid state
@@ -578,29 +579,57 @@ namespace SimpleImageSlideShow.Components.Pages
             int maxC = Math.Max(0, cols - colSpan + 1);
             if (maxR == 0 || maxC == 0) return false;
 
-            var candidates = new List<(int r, int c)>(maxR * maxC);
-            for (int r = 0; r < maxR; r++)
-                for (int c = 0; c < maxC; c++)
-                    candidates.Add((r, c));
-
-            // Fisher–Yates shuffle
-            for (int i = candidates.Count - 1; i > 0; i--)
+            var totalCandidates = maxR * maxC;
+            if (totalCandidates <= MaxPlacementCandidates)
             {
-                int j = Random.Shared.Next(i + 1);
-                (candidates[i], candidates[j]) = (candidates[j], candidates[i]);
-            }
+                var candidates = new List<(int r, int c)>(totalCandidates);
+                for (int r = 0; r < maxR; r++)
+                    for (int c = 0; c < maxC; c++)
+                        candidates.Add((r, c));
 
-            foreach (var (r, c) in candidates)
-            {
-                bool ok = true;
-                for (int rr = r; rr < r + rowSpan && ok; rr++)
+                // Fisher–Yates shuffle
+                for (int i = candidates.Count - 1; i > 0; i--)
                 {
-                    for (int cc = c; cc < c + colSpan; cc++)
+                    int j = Random.Shared.Next(i + 1);
+                    (candidates[i], candidates[j]) = (candidates[j], candidates[i]);
+                }
+
+                foreach (var (r, c) in candidates)
+                {
+                    bool ok = true;
+                    for (int rr = r; rr < r + rowSpan && ok; rr++)
                     {
-                        if (occ[rr, cc] || (avoidClock && IsClockCell(rr, cc))) { ok = false; break; }
+                        for (int cc = c; cc < c + colSpan; cc++)
+                        {
+                            if (occ[rr, cc] || (avoidClock && IsClockCell(rr, cc))) { ok = false; break; }
+                        }
+                    }
+                    if (ok) { row = r; col = c; return true; }
+                }
+            }
+            else
+            {
+                // For extremely dense grids (e.g., 1px tiles), sample a sparse, randomized stride to avoid huge allocations.
+                var stride = (int)Math.Ceiling(Math.Sqrt(totalCandidates / (double)MaxPlacementCandidates));
+                stride = Math.Max(1, stride);
+                var rowOffset = Random.Shared.Next(Math.Min(stride, maxR));
+                var colOffset = Random.Shared.Next(Math.Min(stride, maxC));
+
+                for (int r = rowOffset; r < maxR; r += stride)
+                {
+                    for (int c = colOffset; c < maxC; c += stride)
+                    {
+                        bool ok = true;
+                        for (int rr = r; rr < r + rowSpan && ok; rr++)
+                        {
+                            for (int cc = c; cc < c + colSpan; cc++)
+                            {
+                                if (occ[rr, cc] || (avoidClock && IsClockCell(rr, cc))) { ok = false; break; }
+                            }
+                        }
+                        if (ok) { row = r; col = c; return true; }
                     }
                 }
-                if (ok) { row = r; col = c; return true; }
             }
             return false;
         }
