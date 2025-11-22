@@ -125,6 +125,8 @@ namespace SimpleImageSlideShow.Components.Pages
         private const int PlanCapacity = 5; // plan up to 5 steps ahead
         private uint RandomScaleTries { get; set; } = 10; // random ratio attempts per placement
         private const double ShrinkGuardThreshold = 0.25; // 原寸未満回避を適用する長辺比率の上限
+        private const double PositionJitterRatio = 0.22; // タイル枠内で遊ばせる割合（格子を細かくせずランダム化）
+        private const double PositionJitterMaxPx = 64;
 
         // Precomputed next step to reduce stutter on tick
         private record PlannedStep
@@ -413,23 +415,9 @@ namespace SimpleImageSlideShow.Components.Pages
                 var avoidClock = ShowClock && AvoidClockOverlap;
                 if (TryPlace(reqRows, reqCols, out var r0, out var c0, avoidClock: avoidClock))
                 {
-                    var item0 = new TiledItem
-                    {
-                        Path = imagePath,
-                        Row = r0,
-                        Col = c0,
-                        RowSpan = reqRows,
-                        ColSpan = reqCols,
-                        Left = OffsetX + c0 * TileW,
-                        Top = OffsetY + r0 * TileH,
-                        Width = reqCols * TileW,
-                        Height = reqRows * TileH,
-                        Scale = rand,
-                        ImgWidth = sw,
-                        ImgHeight = sh,
-                        Src = BuildVirtualHostUrl(imagePath),
-                        AudioSrc = GetAudioUrlForImage(imagePath)
-                    };
+                    var src0 = BuildVirtualHostUrl(imagePath);
+                    var audio0 = GetAudioUrlForImage(imagePath);
+                    var item0 = CreateTiledItem(imagePath, r0, c0, reqRows, reqCols, rand, sw, sh, src0, audio0);
                     FillCells(item0.Row, item0.Col, item0.RowSpan, item0.ColSpan, true);
                     SetOwners(item0, true);
                     Items.Add(item0);
@@ -447,23 +435,9 @@ namespace SimpleImageSlideShow.Components.Pages
                     int reqRowsD = Math.Max(1, (int)Math.Ceiling(shD / TileH));
                     if (reqColsD <= Cols && reqRowsD <= Rows && TryPlace(reqRowsD, reqColsD, out var rD, out var cD, avoidClock: avoidClock))
                     {
-                        var itemD = new TiledItem
-                        {
-                            Path = imagePath,
-                            Row = rD,
-                            Col = cD,
-                            RowSpan = reqRowsD,
-                            ColSpan = reqColsD,
-                            Left = OffsetX + cD * TileW,
-                            Top = OffsetY + rD * TileH,
-                            Width = reqColsD * TileW,
-                            Height = reqRowsD * TileH,
-                            Scale = rtry,
-                            ImgWidth = swD,
-                            ImgHeight = shD,
-                            Src = BuildVirtualHostUrl(imagePath),
-                            AudioSrc = GetAudioUrlForImage(imagePath)
-                        };
+                        var srcD = BuildVirtualHostUrl(imagePath);
+                        var audioD = GetAudioUrlForImage(imagePath);
+                        var itemD = CreateTiledItem(imagePath, rD, cD, reqRowsD, reqColsD, rtry, swD, shD, srcD, audioD);
                         FillCells(itemD.Row, itemD.Col, itemD.RowSpan, itemD.ColSpan, true);
                         SetOwners(itemD, true);
                         Items.Add(itemD);
@@ -507,23 +481,9 @@ namespace SimpleImageSlideShow.Components.Pages
                 }
 
                 // place new item at the precomputed location
-                var item = new TiledItem
-                {
-                    Path = imagePath,
-                    Row = rr,
-                    Col = cc,
-                    RowSpan = reqRows,
-                    ColSpan = reqCols,
-                    Left = OffsetX + cc * TileW,
-                    Top = OffsetY + rr * TileH,
-                    Width = reqCols * TileW,
-                    Height = reqRows * TileH,
-                    Scale = rand,
-                    ImgWidth = sw,
-                    ImgHeight = sh,
-                    Src = BuildVirtualHostUrl(imagePath),
-                    AudioSrc = GetAudioUrlForImage(imagePath)
-                };
+                var src = BuildVirtualHostUrl(imagePath);
+                var audio = GetAudioUrlForImage(imagePath);
+                var item = CreateTiledItem(imagePath, rr, cc, reqRows, reqCols, rand, sw, sh, src, audio);
                 FillCells(item.Row, item.Col, item.RowSpan, item.ColSpan, true);
                 SetOwners(item, true);
                 Items.Add(item);
@@ -666,6 +626,43 @@ namespace SimpleImageSlideShow.Components.Pages
             return (sw, sh);
         }
 
+        private (double left, double top, double width, double height) ComputeJitteredFrame(int row, int col, int rowSpan, int colSpan)
+        {
+            var areaW = colSpan * TileW;
+            var areaH = rowSpan * TileH;
+            var slackX = Math.Min(PositionJitterMaxPx, areaW * PositionJitterRatio);
+            var slackY = Math.Min(PositionJitterMaxPx, areaH * PositionJitterRatio);
+            var width = Math.Max(1.0, areaW - slackX);
+            var height = Math.Max(1.0, areaH - slackY);
+            var jitterX = slackX > 0 ? Random.Shared.NextDouble() * slackX : 0;
+            var jitterY = slackY > 0 ? Random.Shared.NextDouble() * slackY : 0;
+            var left = OffsetX + col * TileW + jitterX;
+            var top = OffsetY + row * TileH + jitterY;
+            return (left, top, width, height);
+        }
+
+        private TiledItem CreateTiledItem(string path, int row, int col, int rowSpan, int colSpan, double scale, double imgWidth, double imgHeight, string src, string? audioSrc = null)
+        {
+            var (left, top, width, height) = ComputeJitteredFrame(row, col, rowSpan, colSpan);
+            return new TiledItem
+            {
+                Path = path,
+                Row = row,
+                Col = col,
+                RowSpan = rowSpan,
+                ColSpan = colSpan,
+                Left = left,
+                Top = top,
+                Width = width,
+                Height = height,
+                Scale = scale,
+                ImgWidth = imgWidth,
+                ImgHeight = imgHeight,
+                Src = src,
+                AudioSrc = audioSrc
+            };
+        }
+
         private bool TryPlaceAreaBasedNoUpscale(double origW, double origH, string filePath, double lo, double hi, double initialRatio, out TiledItem item, bool avoidClock)
         {
             item = default!;
@@ -687,22 +684,8 @@ namespace SimpleImageSlideShow.Components.Pages
                     {
                         if (TryPlace(rs, cs, out var r, out var c, avoidClock))
                         {
-                            item = new TiledItem
-                            {
-                                Path = filePath,
-                                Row = r,
-                                Col = c,
-                                RowSpan = rs,
-                                ColSpan = cs,
-                                Left = OffsetX + c * TileW,
-                                Top = OffsetY + r * TileH,
-                                Width = cs * TileW,
-                                Height = rs * TileH,
-                                Scale = ratio,
-                                ImgWidth = sw,
-                                ImgHeight = sh,
-                                Src = BuildVirtualHostUrl(filePath)
-                            };
+                            var src = BuildVirtualHostUrl(filePath);
+                            item = CreateTiledItem(filePath, r, c, rs, cs, ratio, sw, sh, src);
                             return true;
                         }
                     }
@@ -732,22 +715,8 @@ namespace SimpleImageSlideShow.Components.Pages
                     {
                         if (TryPlace(rs, cs, out var r, out var c, avoidClock))
                         {
-                            item = new TiledItem
-                            {
-                                Path = filePath,
-                                Row = r,
-                                Col = c,
-                                RowSpan = rs,
-                                ColSpan = cs,
-                                Left = OffsetX + c * TileW,
-                                Top = OffsetY + r * TileH,
-                                Width = cs * TileW,
-                                Height = rs * TileH,
-                                Scale = ratio,
-                                ImgWidth = sw,
-                                ImgHeight = sh,
-                                Src = BuildVirtualHostUrl(filePath)
-                            };
+                            var src = BuildVirtualHostUrl(filePath);
+                            item = CreateTiledItem(filePath, r, c, rs, cs, ratio, sw, sh, src);
                             return true;
                         }
                     }
@@ -1275,23 +1244,7 @@ namespace SimpleImageSlideShow.Components.Pages
                 }
             }
 
-            var item = new TiledItem
-            {
-                Path = plan.Path,
-                Row = plan.Row,
-                Col = plan.Col,
-                RowSpan = plan.RowSpan,
-                ColSpan = plan.ColSpan,
-                Left = OffsetX + plan.Col * TileW,
-                Top = OffsetY + plan.Row * TileH,
-                Width = plan.ColSpan * TileW,
-                Height = plan.RowSpan * TileH,
-                Scale = plan.Scale,
-                ImgWidth = plan.ImgWidth,
-                ImgHeight = plan.ImgHeight,
-                Src = plan.Src,
-                AudioSrc = plan.AudioSrc
-            };
+            var item = CreateTiledItem(plan.Path, plan.Row, plan.Col, plan.RowSpan, plan.ColSpan, plan.Scale, plan.ImgWidth, plan.ImgHeight, plan.Src, plan.AudioSrc);
             FillCells(item.Row, item.Col, item.RowSpan, item.ColSpan, true);
             SetOwners(item, true);
             Items.Add(item);
