@@ -60,6 +60,11 @@ namespace SimpleImageSlideShow.Components.Pages
         private double MaxScale { get; set; } = 1.0;
         private string BackgroundColor { get; set; } = DefaultBackgroundColor;
         private string? DirectoryPath { get; set; }
+        private IReadOnlyList<SettingsProfileSummary> SettingsProfiles { get; set; } = [];
+        private string? ActiveSettingsProfileId { get; set; }
+        private string ActiveSettingsProfileName { get; set; } = "Default";
+        private bool IsProfileChanging { get; set; }
+        private bool CanDeleteActiveProfile => SettingsProfiles.Count > 1 && !string.IsNullOrWhiteSpace(ActiveSettingsProfileId);
         private bool IsFullScreen { get; set; }
         private bool IsWindowModeChanging { get; set; }
         private string HostName => WebViewHost.HostName;

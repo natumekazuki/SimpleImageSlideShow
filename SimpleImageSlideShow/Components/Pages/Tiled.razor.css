@@ -9,6 +9,21 @@
     width: 420px;
 }
 
+.profile-controls {
+    min-width: 260px;
+}
+
+.profile-controls .form-control,
+.profile-controls .form-select {
+    max-width: 320px;
+}
+
+.profile-buttons {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+}
+
 .tile-item {
     position: absolute;
     display: flex;

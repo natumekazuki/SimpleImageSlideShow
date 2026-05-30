@@ -24,6 +24,11 @@ namespace SimpleImageSlideShow.Services
 
         public async Task<AppSettings> LoadAsync()
         {
+            return (await LoadActiveProfileAsync()).Settings;
+        }
+
+        public async Task<SettingsProfile> LoadActiveProfileAsync()
+        {
             await DatabaseLock.WaitAsync();
             try
             {
@@ -31,12 +36,43 @@ namespace SimpleImageSlideShow.Services
                 await using var connection = await OpenConnectionAsync();
                 await EnsureDatabaseAsync(connection);
                 await EnsureInitialProfileAsync(connection);
-                return await LoadActiveProfileAsync(connection) ?? new AppSettings();
+                return await LoadActiveProfileAsync(connection) ?? CreateFallbackProfile();
             }
             catch
             {
                 // ignore and fall back
-                return new AppSettings();
+                return CreateFallbackProfile();
+            }
+            finally
+            {
+                DatabaseLock.Release();
+            }
+        }
+
+        public async Task<IReadOnlyList<SettingsProfileSummary>> ListProfilesAsync()
+        {
+            await DatabaseLock.WaitAsync();
+            try
+            {
+                Directory.CreateDirectory(_settingsDirectory);
+                await using var connection = await OpenConnectionAsync();
+                await EnsureDatabaseAsync(connection);
+                await EnsureInitialProfileAsync(connection);
+
+                var profiles = new List<SettingsProfileSummary>();
+                await using var command = connection.CreateCommand();
+                command.CommandText = """
+                    SELECT id, name, is_active
+                    FROM settings_profiles
+                    ORDER BY is_active DESC, updated_at DESC, name COLLATE NOCASE ASC;
+                    """;
+                await using var reader = await command.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    profiles.Add(new SettingsProfileSummary(reader.GetString(0), reader.GetString(1), reader.GetInt64(2) != 0));
+                }
+
+                return profiles;
             }
             finally
             {
@@ -52,8 +88,150 @@ namespace SimpleImageSlideShow.Services
                 Directory.CreateDirectory(_settingsDirectory);
                 await using var connection = await OpenConnectionAsync();
                 await EnsureDatabaseAsync(connection);
-                var profileId = await GetActiveProfileIdAsync(connection) ?? Guid.NewGuid().ToString("D");
-                await UpsertProfileAsync(connection, profileId, DefaultProfileName, isActive: true, Normalize(settings));
+                var activeProfile = await GetActiveProfileSummaryAsync(connection);
+                var profileId = activeProfile?.Id ?? Guid.NewGuid().ToString("D");
+                var name = activeProfile?.Name ?? DefaultProfileName;
+                await UpsertProfileAsync(connection, profileId, name, isActive: true, Normalize(settings));
+            }
+            finally
+            {
+                DatabaseLock.Release();
+            }
+        }
+
+        public async Task<string> CreateProfileAsync(string name, AppSettings settings, bool isActive)
+        {
+            await DatabaseLock.WaitAsync();
+            try
+            {
+                Directory.CreateDirectory(_settingsDirectory);
+                await using var connection = await OpenConnectionAsync();
+                await EnsureDatabaseAsync(connection);
+                await EnsureInitialProfileAsync(connection);
+
+                var profileId = Guid.NewGuid().ToString("D");
+                await UpsertProfileAsync(connection, profileId, NormalizeProfileName(name), isActive, Normalize(settings));
+                return profileId;
+            }
+            finally
+            {
+                DatabaseLock.Release();
+            }
+        }
+
+        public async Task RenameProfileAsync(string profileId, string name)
+        {
+            if (string.IsNullOrWhiteSpace(profileId)) return;
+
+            await DatabaseLock.WaitAsync();
+            try
+            {
+                Directory.CreateDirectory(_settingsDirectory);
+                await using var connection = await OpenConnectionAsync();
+                await EnsureDatabaseAsync(connection);
+                await EnsureInitialProfileAsync(connection);
+
+                await using var command = connection.CreateCommand();
+                command.CommandText = """
+                    UPDATE settings_profiles
+                    SET name = $name,
+                        updated_at = $updated_at
+                    WHERE id = $id;
+                    """;
+                command.Parameters.AddWithValue("$id", profileId);
+                command.Parameters.AddWithValue("$name", NormalizeProfileName(name));
+                command.Parameters.AddWithValue("$updated_at", DateTimeOffset.UtcNow.ToString("O"));
+                await command.ExecuteNonQueryAsync();
+            }
+            finally
+            {
+                DatabaseLock.Release();
+            }
+        }
+
+        public async Task SetActiveProfileAsync(string profileId)
+        {
+            if (string.IsNullOrWhiteSpace(profileId)) return;
+
+            await DatabaseLock.WaitAsync();
+            try
+            {
+                Directory.CreateDirectory(_settingsDirectory);
+                await using var connection = await OpenConnectionAsync();
+                await EnsureDatabaseAsync(connection);
+                await EnsureInitialProfileAsync(connection);
+
+                await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync();
+                if (!await ProfileExistsAsync(connection, transaction, profileId))
+                {
+                    await transaction.RollbackAsync();
+                    return;
+                }
+
+                await SetActiveProfileAsync(connection, profileId, transaction);
+                await transaction.CommitAsync();
+            }
+            finally
+            {
+                DatabaseLock.Release();
+            }
+        }
+
+        public async Task<bool> DeleteProfileAsync(string profileId)
+        {
+            if (string.IsNullOrWhiteSpace(profileId)) return false;
+
+            await DatabaseLock.WaitAsync();
+            try
+            {
+                Directory.CreateDirectory(_settingsDirectory);
+                await using var connection = await OpenConnectionAsync();
+                await EnsureDatabaseAsync(connection);
+                await EnsureInitialProfileAsync(connection);
+
+                await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync();
+                var count = await CountProfilesAsync(connection, transaction);
+                if (count <= 1)
+                {
+                    await transaction.RollbackAsync();
+                    return false;
+                }
+
+                var wasActive = await IsActiveProfileAsync(connection, transaction, profileId);
+                int deletedRows;
+                await using (var deleteCommand = connection.CreateCommand())
+                {
+                    deleteCommand.Transaction = transaction;
+                    deleteCommand.CommandText = "DELETE FROM settings_profiles WHERE id = $id;";
+                    deleteCommand.Parameters.AddWithValue("$id", profileId);
+                    deletedRows = await deleteCommand.ExecuteNonQueryAsync();
+                }
+
+                if (deletedRows == 0)
+                {
+                    await transaction.RollbackAsync();
+                    return false;
+                }
+
+                if (wasActive)
+                {
+                    await using var selectCommand = connection.CreateCommand();
+                    selectCommand.Transaction = transaction;
+                    selectCommand.CommandText = """
+                        SELECT id
+                        FROM settings_profiles
+                        ORDER BY updated_at DESC
+                        LIMIT 1;
+                        """;
+                    var nextProfileId = await selectCommand.ExecuteScalarAsync() as string;
+                    if (!string.IsNullOrWhiteSpace(nextProfileId))
+                    {
+                        await SetActiveProfileAsync(connection, nextProfileId, transaction);
+                    }
+                }
+
+                await transaction.CommitAsync();
+                return true;
             }
             finally
             {
@@ -124,18 +302,23 @@ namespace SimpleImageSlideShow.Services
             await UpsertProfileAsync(connection, Guid.NewGuid().ToString("D"), DefaultProfileName, isActive: true, Normalize(new AppSettings()));
         }
 
-        private static async Task<string?> GetActiveProfileIdAsync(SqliteConnection connection)
+        private static async Task<SettingsProfileSummary?> GetActiveProfileSummaryAsync(SqliteConnection connection)
         {
             await using var command = connection.CreateCommand();
-            command.CommandText = "SELECT id FROM settings_profiles WHERE is_active = 1 LIMIT 1;";
-            return await command.ExecuteScalarAsync() as string;
+            command.CommandText = "SELECT id, name, is_active FROM settings_profiles WHERE is_active = 1 LIMIT 1;";
+            await using var reader = await command.ExecuteReaderAsync();
+            if (!await reader.ReadAsync()) return null;
+            return new SettingsProfileSummary(reader.GetString(0), reader.GetString(1), reader.GetInt64(2) != 0);
         }
 
-        private static async Task<AppSettings?> LoadActiveProfileAsync(SqliteConnection connection)
+        private static async Task<SettingsProfile?> LoadActiveProfileAsync(SqliteConnection connection)
         {
             await using var command = connection.CreateCommand();
             command.CommandText = """
                 SELECT
+                    id,
+                    name,
+                    is_active,
                     directory_path,
                     min_delay_seconds,
                     max_delay_seconds,
@@ -159,24 +342,49 @@ namespace SimpleImageSlideShow.Services
             await using var reader = await command.ExecuteReaderAsync();
             if (!await reader.ReadAsync()) return null;
 
-            return Normalize(new AppSettings
+            var settings = Normalize(new AppSettings
             {
-                DirectoryPath = reader.IsDBNull(0) ? null : reader.GetString(0),
-                MinDelaySeconds = ToUInt32(reader.GetInt64(1), 5),
-                MaxDelaySeconds = ToUInt32(reader.GetInt64(2), 5),
-                WindowDisplayMode = reader.GetString(3),
-                TiledMinScale = reader.GetDouble(4),
-                TiledMaxScale = reader.GetDouble(5),
-                TiledCols = ToInt32(reader.GetInt64(6), 6),
-                MinTilePx = ToInt32(reader.GetInt64(7), 128),
-                TiledReuseTtlSeconds = ToInt32(reader.GetInt64(8), 120),
-                RandomScaleTries = ToUInt32(reader.GetInt64(9), 10),
-                ShowTiledClock = reader.GetInt64(10) != 0,
-                TiledClockCorner = reader.GetString(11),
-                TiledClockScale = reader.GetDouble(12),
-                AvoidTiledClockOverlap = reader.GetInt64(13) != 0,
-                BackgroundColor = reader.GetString(14)
+                DirectoryPath = reader.IsDBNull(3) ? null : reader.GetString(3),
+                MinDelaySeconds = ToUInt32(reader.GetInt64(4), 5),
+                MaxDelaySeconds = ToUInt32(reader.GetInt64(5), 5),
+                WindowDisplayMode = reader.GetString(6),
+                TiledMinScale = reader.GetDouble(7),
+                TiledMaxScale = reader.GetDouble(8),
+                TiledCols = ToInt32(reader.GetInt64(9), 6),
+                MinTilePx = ToInt32(reader.GetInt64(10), 128),
+                TiledReuseTtlSeconds = ToInt32(reader.GetInt64(11), 120),
+                RandomScaleTries = ToUInt32(reader.GetInt64(12), 10),
+                ShowTiledClock = reader.GetInt64(13) != 0,
+                TiledClockCorner = reader.GetString(14),
+                TiledClockScale = reader.GetDouble(15),
+                AvoidTiledClockOverlap = reader.GetInt64(16) != 0,
+                BackgroundColor = reader.GetString(17)
             });
+            return new SettingsProfile(reader.GetString(0), reader.GetString(1), reader.GetInt64(2) != 0, settings);
+        }
+
+        private static async Task SetActiveProfileAsync(SqliteConnection connection, string profileId, SqliteTransaction? transaction = null)
+        {
+            await using (var deactivateCommand = connection.CreateCommand())
+            {
+                deactivateCommand.Transaction = transaction;
+                deactivateCommand.CommandText = "UPDATE settings_profiles SET is_active = 0;";
+                await deactivateCommand.ExecuteNonQueryAsync();
+            }
+
+            await using (var activateCommand = connection.CreateCommand())
+            {
+                activateCommand.Transaction = transaction;
+                activateCommand.CommandText = """
+                    UPDATE settings_profiles
+                    SET is_active = 1,
+                        updated_at = $updated_at
+                    WHERE id = $id;
+                    """;
+                activateCommand.Parameters.AddWithValue("$id", profileId);
+                activateCommand.Parameters.AddWithValue("$updated_at", DateTimeOffset.UtcNow.ToString("O"));
+                await activateCommand.ExecuteNonQueryAsync();
+            }
         }
 
         private static async Task UpsertProfileAsync(SqliteConnection connection, string profileId, string name, bool isActive, AppSettings settings)
@@ -277,6 +485,46 @@ namespace SimpleImageSlideShow.Services
             command.Parameters.AddWithValue("$created_at", now);
             command.Parameters.AddWithValue("$updated_at", now);
             await command.ExecuteNonQueryAsync();
+        }
+
+        private static async Task<int> CountProfilesAsync(SqliteConnection connection, SqliteTransaction transaction)
+        {
+            await using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = "SELECT COUNT(*) FROM settings_profiles;";
+            return Convert.ToInt32(await command.ExecuteScalarAsync());
+        }
+
+        private static async Task<bool> IsActiveProfileAsync(SqliteConnection connection, SqliteTransaction transaction, string profileId)
+        {
+            await using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = "SELECT is_active FROM settings_profiles WHERE id = $id;";
+            command.Parameters.AddWithValue("$id", profileId);
+            var value = await command.ExecuteScalarAsync();
+            return value is not null && value != DBNull.Value && Convert.ToInt64(value) != 0;
+        }
+
+        private static async Task<bool> ProfileExistsAsync(SqliteConnection connection, SqliteTransaction transaction, string profileId)
+        {
+            await using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = "SELECT 1 FROM settings_profiles WHERE id = $id LIMIT 1;";
+            command.Parameters.AddWithValue("$id", profileId);
+            var value = await command.ExecuteScalarAsync();
+            return value is not null && value != DBNull.Value;
+        }
+
+        private static SettingsProfile CreateFallbackProfile()
+        {
+            return new SettingsProfile(Guid.Empty.ToString("D"), DefaultProfileName, true, new AppSettings());
+        }
+
+        private static string NormalizeProfileName(string name)
+        {
+            var trimmed = name.Trim();
+            if (string.IsNullOrWhiteSpace(trimmed)) return DefaultProfileName;
+            return trimmed.Length <= 80 ? trimmed : trimmed[..80];
         }
 
         private static AppSettings Normalize(AppSettings settings)

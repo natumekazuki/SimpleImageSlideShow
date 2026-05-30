@@ -5,6 +5,167 @@ namespace SimpleImageSlideShow.Components.Pages
 {
     public sealed partial class Tiled
     {
+        private async Task RefreshSettingsProfilesAsync()
+        {
+            SettingsProfiles = await SettingsService.ListProfilesAsync();
+            var activeProfile = SettingsProfiles.FirstOrDefault(profile => profile.IsActive);
+            if (activeProfile is not null)
+            {
+                ActiveSettingsProfileId = activeProfile.Id;
+                ActiveSettingsProfileName = activeProfile.Name;
+            }
+        }
+
+        private void ApplySettingsToState(Models.AppSettings settings)
+        {
+            var delayRange = Models.DelayRange.Normalize(settings.MinDelaySeconds, settings.MaxDelaySeconds);
+            MinDelaySeconds = delayRange.MinSeconds;
+            MaxDelaySeconds = delayRange.MaxSeconds;
+            MinScale = Math.Clamp(settings.TiledMinScale, 0.1, 1.0);
+            MaxScale = Math.Clamp(settings.TiledMaxScale, 0.1, 1.0);
+            if (MaxScale < MinScale) MaxScale = MinScale;
+            DirectoryPath = settings.DirectoryPath;
+            BackgroundColor = NormalizeBackgroundColor(settings.BackgroundColor);
+            TiledCols = settings.TiledCols > 0 ? settings.TiledCols : 6;
+            MinTilePx = settings.MinTilePx > 0 ? settings.MinTilePx : 128;
+            ReuseTtlSeconds = settings.TiledReuseTtlSeconds > 0 ? settings.TiledReuseTtlSeconds : 120;
+            RandomScaleTries = settings.RandomScaleTries > 0 ? settings.RandomScaleTries : 10;
+            ShowClock = settings.ShowTiledClock;
+            AvoidClockOverlap = settings.AvoidTiledClockOverlap;
+            ClockCorner = NormalizeClockCorner(settings.TiledClockCorner);
+            ClockScale = Math.Clamp(settings.TiledClockScale, 0.5, 2.0);
+        }
+
+        private Models.AppSettings CaptureSettingsFromState()
+        {
+            return new Models.AppSettings
+            {
+                MinDelaySeconds = MinDelaySeconds,
+                MaxDelaySeconds = MaxDelaySeconds,
+                TiledMinScale = MinScale,
+                TiledMaxScale = MaxScale,
+                DirectoryPath = DirectoryPath,
+                BackgroundColor = BackgroundColor,
+                TiledCols = TiledCols,
+                MinTilePx = MinTilePx,
+                TiledReuseTtlSeconds = ReuseTtlSeconds,
+                RandomScaleTries = RandomScaleTries,
+                ShowTiledClock = ShowClock,
+                AvoidTiledClockOverlap = AvoidClockOverlap,
+                TiledClockCorner = ClockCorner,
+                TiledClockScale = ClockScale,
+                WindowDisplayMode = IsFullScreen ? "FullScreen" : "Windowed"
+            };
+        }
+
+        private async Task SaveActiveProfileNameAsync()
+        {
+            if (!string.IsNullOrWhiteSpace(ActiveSettingsProfileId))
+            {
+                await SettingsService.RenameProfileAsync(ActiveSettingsProfileId, ActiveSettingsProfileName);
+            }
+        }
+
+        private async Task SaveCurrentProfileAsync()
+        {
+            await SaveActiveProfileNameAsync();
+            await SettingsService.SaveAsync(CaptureSettingsFromState());
+            await RefreshSettingsProfilesAsync();
+        }
+
+        private void OnProfileNameInput(ChangeEventArgs e)
+        {
+            ActiveSettingsProfileName = e.Value?.ToString() ?? string.Empty;
+        }
+
+        private async Task OnActiveProfileChanged(ChangeEventArgs e)
+        {
+            var profileId = e.Value?.ToString();
+            if (string.IsNullOrWhiteSpace(profileId) || string.Equals(profileId, ActiveSettingsProfileId, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            IsProfileChanging = true;
+            try
+            {
+                await StopAsync();
+                await SaveCurrentProfileAsync();
+                await SettingsService.SetActiveProfileAsync(profileId);
+                await PrepareActiveProfileImagesAsync();
+                ReloadTiledPage();
+            }
+            finally
+            {
+                IsProfileChanging = false;
+            }
+        }
+
+        private async Task CreateProfileAsync()
+        {
+            IsProfileChanging = true;
+            try
+            {
+                var profileName = GetNewProfileName();
+                await SettingsService.CreateProfileAsync(profileName, CaptureSettingsFromState(), isActive: true);
+                await RefreshSettingsProfilesAsync();
+            }
+            finally
+            {
+                IsProfileChanging = false;
+            }
+        }
+
+        private async Task DeleteActiveProfileAsync()
+        {
+            if (!CanDeleteActiveProfile || string.IsNullOrWhiteSpace(ActiveSettingsProfileId)) return;
+
+            IsProfileChanging = true;
+            try
+            {
+                await StopAsync();
+                if (await SettingsService.DeleteProfileAsync(ActiveSettingsProfileId))
+                {
+                    await PrepareActiveProfileImagesAsync();
+                    ReloadTiledPage();
+                }
+            }
+            finally
+            {
+                IsProfileChanging = false;
+            }
+        }
+
+        private async Task PrepareActiveProfileImagesAsync()
+        {
+            var activeProfile = await SettingsService.LoadActiveProfileAsync();
+            var directoryPath = activeProfile.Settings.DirectoryPath;
+            if (string.IsNullOrWhiteSpace(directoryPath) || !Directory.Exists(directoryPath)) return;
+
+            ImageService.LoadImages(directoryPath);
+            WebViewHost.MapImagesFolder(directoryPath);
+        }
+
+        private void ReloadTiledPage()
+        {
+            Nav.NavigateTo("/", forceLoad: true);
+        }
+
+        private string GetNewProfileName()
+        {
+            const string baseName = "New Profile";
+            var names = SettingsProfiles.Select(profile => profile.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (!names.Contains(baseName)) return baseName;
+
+            for (var i = 2; i < 1000; i++)
+            {
+                var candidate = $"{baseName} {i}";
+                if (!names.Contains(candidate)) return candidate;
+            }
+
+            return $"{baseName} {DateTime.Now:yyyyMMddHHmmss}";
+        }
+
         private void OnMinDelayInput(ChangeEventArgs e)
         {
             if (e.Value is string s && uint.TryParse(s, out var v))
@@ -89,25 +250,7 @@ namespace SimpleImageSlideShow.Components.Pages
 
         private async Task SaveAndApplyAsync()
         {
-            var settings = await SettingsService.LoadAsync();
-            settings.MinDelaySeconds = MinDelaySeconds;
-            settings.MaxDelaySeconds = MaxDelaySeconds;
-            // Fill target is implicit (100%); not persisted anymore
-            settings.TiledMinScale = MinScale;
-            settings.TiledMaxScale = MaxScale;
-            settings.DirectoryPath = DirectoryPath;
-            settings.BackgroundColor = BackgroundColor;
-            settings.TiledCols = TiledCols;
-            settings.MinTilePx = MinTilePx;
-            settings.TiledReuseTtlSeconds = ReuseTtlSeconds;
-            settings.RandomScaleTries = RandomScaleTries;
-            settings.ShowTiledClock = ShowClock;
-            settings.AvoidTiledClockOverlap = AvoidClockOverlap;
-            settings.TiledClockCorner = ClockCorner;
-            settings.TiledClockScale = ClockScale;
-            settings.WindowDisplayMode = IsFullScreen ? "FullScreen" : "Windowed";
-            // keep panel size fixed; stop persisting size
-            await SettingsService.SaveAsync(settings);
+            await SaveCurrentProfileAsync();
             await StartAsync();
             try { await EnsurePlanAsync(); } catch { }
         }
@@ -122,13 +265,9 @@ namespace SimpleImageSlideShow.Components.Pages
             DirectoryPath = directoryPath;
             ImageService.LoadImages(directoryPath);
             WebViewHost.MapImagesFolder(directoryPath);
-            var settings = await SettingsService.LoadAsync();
-            settings.DirectoryPath = DirectoryPath;
-            settings.BackgroundColor = BackgroundColor;
-            settings.WindowDisplayMode = IsFullScreen ? "FullScreen" : "Windowed";
-            await SettingsService.SaveAsync(settings);
+            await SaveCurrentProfileAsync();
 
-            Nav.NavigateTo(Nav.Uri, forceLoad: true);
+            ReloadTiledPage();
         }
 
         private async Task ToggleWindowModeAsync()

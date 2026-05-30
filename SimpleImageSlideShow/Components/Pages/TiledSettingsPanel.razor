@@ -1,6 +1,27 @@
+@using SimpleImageSlideShow.Models
+
 <div class="control-panel" title="Settings">
     <div id="tiled-panel" class="panel-body">
         <div class="row g-2 align-items-center">
+            <div class="profile-controls">
+                <label class="form-label">Profile</label>
+                <select class="form-select form-select-sm" value="@ActiveSettingsProfileId" disabled="@IsProfileChanging" @onchange="ActiveProfileChanged">
+                    @foreach (var profile in SettingsProfiles)
+                    {
+                        <option value="@profile.Id">@profile.Name</option>
+                    }
+                </select>
+                <input class="form-control form-control-sm mt-1"
+                       type="text"
+                       maxlength="80"
+                       value="@ActiveSettingsProfileName"
+                       disabled="@IsProfileChanging"
+                       @oninput="ProfileNameInput" />
+                <div class="profile-buttons">
+                    <button class="btn btn-sm btn-outline-secondary" disabled="@IsProfileChanging" @onclick="CreateProfile">New</button>
+                    <button class="btn btn-sm btn-outline-danger" disabled="@(IsProfileChanging || !CanDeleteActiveProfile)" @onclick="DeleteActiveProfile">Delete</button>
+                </div>
+            </div>
             <div>
                 <label class="form-label">Delay min (sec): @MinDelaySeconds</label>
                 <input type="range" min="0" max="60" value="@MinDelaySeconds" @oninput="MinDelayInput" />
@@ -73,6 +94,11 @@
 </div>
 
 @code {
+    [Parameter] public IReadOnlyList<SettingsProfileSummary> SettingsProfiles { get; set; } = [];
+    [Parameter] public string? ActiveSettingsProfileId { get; set; }
+    [Parameter] public string ActiveSettingsProfileName { get; set; } = string.Empty;
+    [Parameter] public bool IsProfileChanging { get; set; }
+    [Parameter] public bool CanDeleteActiveProfile { get; set; }
     [Parameter] public uint MinDelaySeconds { get; set; }
     [Parameter] public uint MaxDelaySeconds { get; set; }
     [Parameter] public string BackgroundColor { get; set; } = string.Empty;
@@ -104,6 +130,10 @@
     [Parameter] public EventCallback<ChangeEventArgs> MaxScaleInput { get; set; }
     [Parameter] public EventCallback<ChangeEventArgs> MinTileInput { get; set; }
     [Parameter] public EventCallback<ChangeEventArgs> RandomScaleTriesInput { get; set; }
+    [Parameter] public EventCallback<ChangeEventArgs> ActiveProfileChanged { get; set; }
+    [Parameter] public EventCallback<ChangeEventArgs> ProfileNameInput { get; set; }
+    [Parameter] public EventCallback CreateProfile { get; set; }
+    [Parameter] public EventCallback DeleteActiveProfile { get; set; }
     [Parameter] public EventCallback ToggleWindowMode { get; set; }
     [Parameter] public EventCallback SaveAndApply { get; set; }
     [Parameter] public EventCallback ChooseAndApplyFolder { get; set; }
