@@ -1,0 +1,10 @@
+schemaVersion: 1
+id: src.app_settings
+kind: source
+links:
+  - rel: documents
+    to: id:docs.design.sqlite_settings_profiles
+    pathHint: docs/design/sqlite-settings-profiles.md
+  - rel: verified-by
+    to: id:tests.settings_service
+    pathHint: SimpleImageSlideShow.Tests/SettingsServiceTests.cs

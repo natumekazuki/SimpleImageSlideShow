@@ -33,7 +33,7 @@ namespace SimpleImageSlideShow.Components.Pages
                 }
             }
 
-            var item = CreateTiledItem(plan.Path, plan.Row, plan.Col, plan.RowSpan, plan.ColSpan, plan.Scale, plan.ImgWidth, plan.ImgHeight, plan.Src, plan.AudioSrc);
+            var item = CreateTiledItem(plan.Path, plan.Row, plan.Col, plan.RowSpan, plan.ColSpan, plan.Scale, plan.ImgWidth, plan.ImgHeight, plan.Src);
             FillCells(item.Row, item.Col, item.RowSpan, item.ColSpan, true);
             SetOwners(item, true);
             Items.Add(item);
@@ -136,7 +136,6 @@ namespace SimpleImageSlideShow.Components.Pages
                         ImgWidth = sw,
                         ImgHeight = sh,
                         Src = BuildVirtualHostUrl(imagePath),
-                        AudioSrc = GetAudioUrlForImage(imagePath),
                         RemoveCount = 0
                     };
                 }
@@ -161,7 +160,6 @@ namespace SimpleImageSlideShow.Components.Pages
                             ImgWidth = swD,
                             ImgHeight = shD,
                             Src = BuildVirtualHostUrl(imagePath),
-                            AudioSrc = GetAudioUrlForImage(imagePath),
                             RemoveCount = 0
                         };
                     }
@@ -186,7 +184,6 @@ namespace SimpleImageSlideShow.Components.Pages
                     ImgWidth = sw,
                     ImgHeight = sh,
                     Src = BuildVirtualHostUrl(imagePath),
-                    AudioSrc = GetAudioUrlForImage(imagePath),
                     RemoveCount = Math.Max(0, removeCount)
                 };
             }

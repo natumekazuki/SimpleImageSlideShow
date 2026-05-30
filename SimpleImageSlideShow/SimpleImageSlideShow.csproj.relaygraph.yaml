@@ -1,0 +1,28 @@
+schemaVersion: 1
+id: src.app.module
+kind: module
+links:
+  - rel: realized-by
+    to: id:src.maui_program
+    pathHint: SimpleImageSlideShow/MauiProgram.cs
+  - rel: realized-by
+    to: id:src.settings_service
+    pathHint: SimpleImageSlideShow/Services/SettingsService.cs
+  - rel: realized-by
+    to: id:src.tiled_page
+    pathHint: SimpleImageSlideShow/Components/Pages/Tiled.razor
+  - rel: realized-by
+    to: id:src.windows_image_service
+    pathHint: SimpleImageSlideShow/Platforms/Windows/ImageService.cs
+  - rel: realized-by
+    to: id:src.windows_webview_host
+    pathHint: SimpleImageSlideShow/Platforms/Windows/WebViewHostService.cs
+  - rel: verified-by
+    to: id:tests.settings_service
+    pathHint: SimpleImageSlideShow.Tests/SettingsServiceTests.cs
+  - rel: verified-by
+    to: id:tests.delay_range
+    pathHint: SimpleImageSlideShow.Tests/DelayRangeTests.cs
+  - rel: verified-by
+    to: id:validation.windows_build
+    pathHint: SimpleImageSlideShow.sln

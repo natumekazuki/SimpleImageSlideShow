@@ -14,8 +14,9 @@ namespace SimpleImageSlideShow.Components.Pages
             WindowService.ModeChanged += OnWindowModeChanged;
 
             var settings = await SettingsService.LoadAsync();
-            DelaySeconds = settings.DelaySeconds > 0 ? settings.DelaySeconds : 5;
-            AudioVolumePercent = Math.Clamp(settings.AudioVolumePercent, 0, 100);
+            var delayRange = DelayRange.Normalize(settings.MinDelaySeconds, settings.MaxDelaySeconds);
+            MinDelaySeconds = delayRange.MinSeconds;
+            MaxDelaySeconds = delayRange.MaxSeconds;
             MinScale = Math.Clamp(settings.TiledMinScale, 0.1, 1.0);
             MaxScale = Math.Clamp(settings.TiledMaxScale, 0.1, 1.0);
             if (MaxScale < MinScale) MaxScale = MinScale;
@@ -69,8 +70,6 @@ namespace SimpleImageSlideShow.Components.Pages
                     _resizeObj = await JS.InvokeAsync<IJSObjectReference>("window.app.addResizeListener", _selfRef);
                 }
                 catch { }
-
-                await ApplyAudioVolumeToJsAsync();
 
                 // 初回はディレイ無視で1枚挿入（グリッド初期化を待つ）
                 await WaitForGridReadyAsync(TimeSpan.FromMilliseconds(800));

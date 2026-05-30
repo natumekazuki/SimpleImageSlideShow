@@ -1,0 +1,15 @@
+schemaVersion: 1
+useGitIgnore: true
+sidecarSuffix: ".relaygraph.yaml"
+plugins:
+  - "relaygraph/plugins/simple-image-slideshow.yaml"
+exclude:
+  - "._relaygraph/**"
+  - "relaygraph/plugins/**"
+  - "**/bin/**"
+  - "**/obj/**"
+  - ".vs/**"
+  - "installer/publish/**"
+  - "installer/artifacts/**"
+  - "SimpleImageSlideShow/Resources/**"
+  - "SimpleImageSlideShow/wwwroot/css/bootstrap/**"

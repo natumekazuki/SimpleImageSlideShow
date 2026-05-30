@@ -6,9 +6,12 @@
 /SimpleImageSlideShow/obj
 /.vs
 /SimpleImageSlideShow/bin
+/SimpleImageSlideShow.Tests/obj
+/SimpleImageSlideShow.Tests/bin
 /installer/publish/
 /installer/artifacts/
 /._.gitignore
 *.bkp
 *.drawio
 /installer/AppVersion.ispp
+/._relaygraph/

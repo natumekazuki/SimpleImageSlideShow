@@ -1,5 +1,7 @@
 # Tileモード音声連動計画
 
+> この計画は履歴として残す。現在の仕様では Tiled の音声再生機能と音量設定は削除済みで、音声連動は実装対象外。
+
 ## 背景と目的
 - Tiledモード (`SimpleImageSlideShow/Components/Pages/Tiled.razor.cs`) は `DelaySeconds` ごとに `PeriodicTimer` で `ApplyPlannedOrStepAsync` を呼び出し（同ファイル:214-233）、新しい画像タイルを追加している。
 - 画像と同名の音声ファイルがあっても無視されるため、画像切り替えが音声より先に進んでしまう。

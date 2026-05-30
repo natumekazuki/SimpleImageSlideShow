@@ -1,0 +1,13 @@
+schemaVersion: 1
+id: src.tiled_playback
+kind: source
+links:
+  - rel: documents
+    to: id:docs.design.sqlite_settings_profiles
+    pathHint: docs/design/sqlite-settings-profiles.md
+  - rel: realized-by
+    to: id:src.delay_range
+    pathHint: SimpleImageSlideShow/Models/DelayRange.cs
+  - rel: realized-by
+    to: id:src.windows_image_service
+    pathHint: SimpleImageSlideShow/Platforms/Windows/ImageService.cs

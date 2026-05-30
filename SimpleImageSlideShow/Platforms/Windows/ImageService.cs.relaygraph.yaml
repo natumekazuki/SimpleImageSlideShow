@@ -1,0 +1,7 @@
+schemaVersion: 1
+id: src.windows_image_service
+kind: source
+links:
+  - rel: realized-by
+    to: id:src.image_models
+    pathHint: SimpleImageSlideShow/Models/ImageEntity.cs

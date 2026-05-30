@@ -1,0 +1,7 @@
+schemaVersion: 1
+id: src.windows_window_service
+kind: source
+links:
+  - rel: realized-by
+    to: id:src.settings_service
+    pathHint: SimpleImageSlideShow/Services/SettingsService.cs

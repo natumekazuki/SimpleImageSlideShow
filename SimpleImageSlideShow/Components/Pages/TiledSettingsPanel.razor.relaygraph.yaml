@@ -1,0 +1,7 @@
+schemaVersion: 1
+id: src.tiled_settings_panel
+kind: source
+links:
+  - rel: realized-by
+    to: id:src.tiled_settings
+    pathHint: SimpleImageSlideShow/Components/Pages/Tiled.razor.Settings.cs

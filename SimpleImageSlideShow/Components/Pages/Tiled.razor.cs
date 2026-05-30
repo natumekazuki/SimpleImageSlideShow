@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using SimpleImageSlideShow.Models;
 using SimpleImageSlideShow.Services;
-using System.Globalization;
 
 namespace SimpleImageSlideShow.Components.Pages
 {
@@ -48,7 +47,6 @@ namespace SimpleImageSlideShow.Components.Pages
             public double ImgWidth { get; set; }
             public double ImgHeight { get; set; }
             public required string Src { get; init; }
-            public string? AudioSrc { get; init; }
         }
 
         private readonly record struct ViewportSize(double Width, double Height);
@@ -56,10 +54,8 @@ namespace SimpleImageSlideShow.Components.Pages
         private List<TiledItem> Items { get; set; } = [];
         private HashSet<string> UsedPaths { get; } = new(StringComparer.OrdinalIgnoreCase);
 
-        private uint DelaySeconds { get; set; } = 5;
-        private double AudioVolumePercent { get; set; } = 0;
-        private double AudioVolume => Math.Clamp(AudioVolumePercent, 0, 100) / 100.0;
-        private const double AudioSilenceEpsilon = 0.0001;
+        private uint MinDelaySeconds { get; set; } = 5;
+        private uint MaxDelaySeconds { get; set; } = 5;
         private double MinScale { get; set; } = 0.5;
         private double MaxScale { get; set; } = 1.0;
         private string BackgroundColor { get; set; } = DefaultBackgroundColor;
@@ -142,7 +138,6 @@ namespace SimpleImageSlideShow.Components.Pages
             public required double ImgWidth { get; init; }
             public required double ImgHeight { get; init; }
             public required string Src { get; init; }
-            public string? AudioSrc { get; init; }
             public int RemoveCount { get; init; }
         }
 

@@ -1,0 +1,7 @@
+schemaVersion: 1
+id: src.windows_webview_host
+kind: source
+links:
+  - rel: realized-by
+    to: id:src.tiled_page
+    pathHint: SimpleImageSlideShow/Components/Pages/Tiled.razor
