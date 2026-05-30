@@ -35,6 +35,7 @@ namespace SimpleImageSlideShow
             builder.Services.AddSingleton<IImageService, ImageService>();
             builder.Services.AddSingleton<IWindowService, WindowService>();
             builder.Services.AddSingleton<IWebViewHostService, WebViewHostService>();
+            builder.Services.AddSingleton<IFolderPickerService, FolderPickerService>();
 #endif
 
             return builder.Build();

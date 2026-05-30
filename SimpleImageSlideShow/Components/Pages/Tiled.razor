@@ -1,86 +1,39 @@
-@page "/tiled"
+@page "/"
 
-<div class="control-panel" title="Settings">
-    <div id="tiled-panel" class="panel-body">
-        <div class="row g-2 align-items-center">
-            <div>
-                <label class="form-label">Mode</label>
-                <div>
-                    <button class="btn btn-sm btn-outline-primary me-1" @onclick='() => SwitchMode("Slide")'>Slide</button>
-                    <button class="btn btn-sm btn-primary" disabled>Tiled</button>
-                </div>
-            </div>
-            <div>
-                <label class="form-label">Delay (sec): @DelaySeconds</label>
-                <input type="range" min="1" max="60" value="@DelaySeconds" @oninput="OnDelayInput" />
-            </div>
-            <div>
-                <label class="form-label">Background</label>
-                <RgbColorPicker Value="@BackgroundColor"
-                                ValueChanged="OnBackgroundColorSelected"
-                                AriaLabel="Tiled background color" />
-            </div>
-            <div>
-                <label class="form-label">Audio volume: @Math.Round(AudioVolumePercent)%</label>
-                <input type="range" min="0" max="100" value="@((int)Math.Round(AudioVolumePercent))" @oninput="OnVolumeInput" />
-                <div class="text-muted small">Starts muted until changed</div>
-            </div>
-            <div>
-                <label class="form-label">Clock</label>
-                <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" role="switch" checked="@ShowClock" @onchange="OnClockToggleChanged" />
-                    <label class="form-check-label">Show clock</label>
-                </div>
-                @if (ShowClock)
-                {
-                    <div class="form-check form-switch mt-1">
-                        <input class="form-check-input" type="checkbox" role="switch" checked="@AvoidClockOverlap" @onchange="OnClockAvoidOverlapChanged" />
-                        <label class="form-check-label">Avoid overlap</label>
-                    </div>
-                    <select class="form-select form-select-sm mt-1" @onchange="OnClockCornerChanged">
-                        @foreach (var option in ClockCornerChoices)
-                        {
-                            <option value="@option.Value" selected="@((ClockCorner == option.Value) ? "selected" : null)">@option.Label</option>
-                        }
-                    </select>
-                    <div class="mt-1">
-                        <label class="form-label">Scale: @string.Format("{0:P0}", ClockScale)</label>
-                        <input type="range" min="50" max="500" step="5" value="@((int)(ClockScale * 100))" @oninput="OnClockScaleInput" />
-                    </div>
-                }
-            </div>
-            <div>
-                <label class="form-label">Columns: @TiledCols (max @Math.Max(ColsMax, TiledCols))</label>
-                <input type="range" min="1" max="@Math.Max(ColsMax, TiledCols)" value="@TiledCols" @oninput="OnColsInput" />
-                <div class="text-muted small">Grid: @Cols x @Rows</div>
-            </div>
-            <div>
-                <label class="form-label">Min scale: @string.Format("{0:P0}", MinScale)</label>
-                <input type="range" min="10" max="100" value="@((int)(MinScale*100))" @oninput="OnMinScaleInput" />
-            </div>
-            <div>
-                <label class="form-label">Max scale: @string.Format("{0:P0}", MaxScale)</label>
-                <input type="range" min="10" max="100" value="@((int)(MaxScale*100))" @oninput="OnMaxScaleInput" />
-            </div>
-            <div>
-                <label class="form-label">Min tile width: @MinTilePx px</label>
-                <input type="range" min="64" max="512" value="@MinTilePx" @oninput="OnMinTileInput" />
-            </div>
-            <div>
-                <label class="form-label">Scale calculate retry: @RandomScaleTries</label>
-                <input type="range" min="1" max="500" value="@RandomScaleTries" @oninput="OnRandomScaleTriesInput" />
-            </div>
-            <div class="buttons">
-                <button class="btn btn-sm btn-outline-secondary" title="Toggle fullscreen" disabled="@IsWindowModeChanging" @onclick="ToggleWindowModeAsync">
-                    @(IsFullScreen ? "Windowed View" : "Full Screen")
-                </button>
-                <button class="btn btn-sm btn-primary" @onclick="SaveAndApplyAsync">Save</button>
-                <button class="btn btn-sm btn-secondary" @onclick="ChooseAndApplyFolderAsync">Change Folder</button>
-                <button class="btn btn-sm btn-danger" @onclick="ExitApp">Exit</button>
-            </div>
-        </div>
-    </div>
-</div>
+<TiledSettingsPanel DelaySeconds="@DelaySeconds"
+                    BackgroundColor="@BackgroundColor"
+                    AudioVolumePercent="@AudioVolumePercent"
+                    ShowClock="@ShowClock"
+                    AvoidClockOverlap="@AvoidClockOverlap"
+                    ClockCorner="@ClockCorner"
+                    ClockScale="@ClockScale"
+                    ClockCornerChoices="@ClockCornerChoices"
+                    TiledCols="@TiledCols"
+                    ColsMax="@ColsMax"
+                    Cols="@Cols"
+                    Rows="@Rows"
+                    MinScale="@MinScale"
+                    MaxScale="@MaxScale"
+                    MinTilePx="@MinTilePx"
+                    RandomScaleTries="@RandomScaleTries"
+                    IsFullScreen="@IsFullScreen"
+                    IsWindowModeChanging="@IsWindowModeChanging"
+                    DelayInput="OnDelayInput"
+                    BackgroundColorSelected="OnBackgroundColorSelected"
+                    VolumeInput="OnVolumeInput"
+                    ClockToggleChanged="OnClockToggleChanged"
+                    ClockAvoidOverlapChanged="OnClockAvoidOverlapChanged"
+                    ClockCornerChanged="OnClockCornerChanged"
+                    ClockScaleInput="OnClockScaleInput"
+                    ColsInput="OnColsInput"
+                    MinScaleInput="OnMinScaleInput"
+                    MaxScaleInput="OnMaxScaleInput"
+                    MinTileInput="OnMinTileInput"
+                    RandomScaleTriesInput="OnRandomScaleTriesInput"
+                    ToggleWindowMode="ToggleWindowModeAsync"
+                    SaveAndApply="SaveAndApplyAsync"
+                    ChooseAndApplyFolder="ChooseAndApplyFolderAsync"
+                    ExitApp="ExitApp" />
 
 <div class="slideshow-container" @ref="ContainerRef" style="@BackgroundStyle">
     @foreach (var item in Items)
@@ -92,12 +45,12 @@
         </div>
     }
 
-    @if (ShowClock)
-    {
-        var clockStyle = $"--clock-width:{ClockWidth}px;--clock-height:{ClockHeight}px;--clock-scale:{ClockScale};";
-        <div id="clock-overlay" class="clock-overlay @ClockCornerCssClass @(ClockOverlapped ? "dim" : "bright")" style="@clockStyle">
-            <div class="clock-time">@ClockTime</div>
-            <div class="clock-date">@ClockDate</div>
-        </div>
-    }
+    <ClockOverlay ShowClock="@ShowClock"
+                  ClockWidth="@ClockWidth"
+                  ClockHeight="@ClockHeight"
+                  ClockScale="@ClockScale"
+                  CornerCssClass="@ClockCornerCssClass"
+                  Overlapped="@ClockOverlapped"
+                  Time="@ClockTime"
+                  Date="@ClockDate" />
 </div>

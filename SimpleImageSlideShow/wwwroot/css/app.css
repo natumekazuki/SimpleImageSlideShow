@@ -206,34 +206,3 @@ h1:focus {
 
 .control-panel input[type="range"] { width: 400px; }
 
-.slide {
-    position: absolute;
-    /* dynamic width based on viewport and image aspect */
-    --img-w: min(80vw, calc(90vh / var(--aspect-ratio)));
-    --img-h: calc(var(--img-w) * var(--aspect-ratio));
-    width: var(--img-w);
-    height: auto;
-    animation-name: slide-left;
-    animation-timing-function: linear;
-    animation-fill-mode: forwards;
-    animation-duration: 10s;
-    /* place vertical center randomly within viewport */
-    top: calc( (var(--img-h) / 2) + ((100vh - var(--img-h)) * var(--offset)) );
-}
-
-
-    .slide img {
-        width: var(--img-w);
-        height: auto;
-    }
-
-@keyframes slide-left {
-    from {
-        transform: translate(100vw, -50%);
-    }
-
-    to {
-        transform: translate(-110%, -50%);
-    }
-}
-
