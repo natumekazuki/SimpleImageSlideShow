@@ -1,5 +1,5 @@
 schemaVersion: 1
-id: src.settings_service
+id: src.settings_profile
 kind: source
 links:
   - rel: documents
@@ -8,9 +8,6 @@ links:
   - rel: realized-by
     to: id:src.app_settings
     pathHint: SimpleImageSlideShow/Models/AppSettings.cs
-  - rel: realized-by
-    to: id:src.settings_profile
-    pathHint: SimpleImageSlideShow/Models/SettingsProfile.cs
   - rel: verified-by
     to: id:tests.settings_service
     pathHint: SimpleImageSlideShow.Tests/SettingsServiceTests.cs

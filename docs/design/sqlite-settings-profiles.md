@@ -2,9 +2,9 @@
 
 ## 目的
 
-設定の永続化を Json ファイルから SQLite に移し、将来の複数設定セット切り替えに備える。
+設定の永続化を SQLite に置き、複数の設定セットを名前付き profile として作成・切り替えできるようにする。
 
-現時点では UI から複数セットを作成・切り替えない。アプリは active profile 1 件だけを既存の `ISettingsService.LoadAsync()` / `SaveAsync()` 経由で読み書きする。
+既存の `ISettingsService.LoadAsync()` / `SaveAsync()` は active profile を対象にする互換 API として残し、profile 一覧・作成・リネーム・切り替え・削除は profile 管理 API で扱う。
 
 ## 保存先
 
@@ -17,7 +17,7 @@
 `settings_profiles` は設定セットを表す。
 
 - `id`: profile 識別子
-- `name`: profile 表示名。現時点では `Default` のみ使用し、UI には出さない。
+- `name`: profile 表示名。UI から文字入力で変更できる。
 - `is_active`: 現在利用中の profile。active は 1 件だけにする。
 - `directory_path`: 表示対象フォルダ。設定セットに含める。
 - `min_delay_seconds`: タイル追加待機時間の最小秒数。下限は 0。
@@ -46,10 +46,24 @@ Tiled 表示と連動する音声再生機能は持たない。
 - 音量設定は保持しない。
 - JavaScript 側に音声再生 API は置かない。
 
-## 将来の複数セット切り替え
+## 複数セット切り替え
 
-複数セット切り替えを実装する場合は、`settings_profiles` をそのまま利用する。
+複数セット切り替えでは、`settings_profiles` をそのまま利用する。
 
-- profile 一覧は `id`, `name`, `is_active` を返す API を追加する。
-- 切り替え時は対象 profile を active にし、画像フォルダの mapping と Tiled 状態を再初期化する。
-- profile の作成・複製・リネーム・削除は `ISettingsService` を拡張して扱う。
+- profile 一覧は `id`, `name`, `is_active` を返す。
+- active profile の読み込みでは `id`, `name`, `is_active`, `AppSettings` を返す。
+- `SaveAsync()` は active profile の設定だけを更新し、既存の profile 名を保持する。
+- profile 作成は現在の UI 設定値を初期値として新規 row を作り、active にできる。
+- profile リネームは `name` のみを更新する。空白名は `Default` に正規化する。
+- profile 削除は最後の 1 件を削除しない。active profile を削除した場合は残りの profile から新しい active を選ぶ。
+- 切り替え時は現在の UI 設定を保存してから対象 profile を active にし、ページを再読み込みして画像フォルダ mapping と Tiled 状態を初期化し直す。
+
+## UI
+
+Tiled 設定パネルの先頭に profile 操作を置く。
+
+- `select`: 登録済み profile を選択する。
+- `input type="text"`: active profile の名前を編集する。最大 80 文字。
+- `New`: 現在の UI 設定値から新しい profile を作成し、active にする。
+- `Delete`: profile が 2 件以上ある場合だけ active profile を削除できる。
+- `Save`: active profile 名と現在の設定値を保存する。

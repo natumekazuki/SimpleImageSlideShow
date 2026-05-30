@@ -27,11 +27,11 @@
         <ApplicationId>Monochrome-Memory.SimpleImageSlideShow</ApplicationId>
 
         <!-- Versions -->
-        <Version>3.1.0</Version>
-        <FileVersion>3.1.0.0</FileVersion>
-        <AssemblyVersion>3.1.0.0</AssemblyVersion>
-        <ApplicationDisplayVersion>3.1.0</ApplicationDisplayVersion>
-        <ApplicationVersion>14</ApplicationVersion>
+        <Version>3.2.0</Version>
+        <FileVersion>3.2.0.0</FileVersion>
+        <AssemblyVersion>3.2.0.0</AssemblyVersion>
+        <ApplicationDisplayVersion>3.2.0</ApplicationDisplayVersion>
+        <ApplicationVersion>15</ApplicationVersion>
 
         <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
         <TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>

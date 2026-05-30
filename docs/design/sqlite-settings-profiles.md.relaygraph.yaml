@@ -9,6 +9,9 @@ links:
     to: id:src.app_settings
     pathHint: SimpleImageSlideShow/Models/AppSettings.cs
   - rel: realized-by
+    to: id:src.settings_profile
+    pathHint: SimpleImageSlideShow/Models/SettingsProfile.cs
+  - rel: realized-by
     to: id:src.tiled_settings
     pathHint: SimpleImageSlideShow/Components/Pages/Tiled.razor.Settings.cs
   - rel: realized-by

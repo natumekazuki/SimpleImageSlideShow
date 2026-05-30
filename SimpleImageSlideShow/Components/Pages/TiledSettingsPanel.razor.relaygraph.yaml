@@ -5,3 +5,9 @@ links:
   - rel: realized-by
     to: id:src.tiled_settings
     pathHint: SimpleImageSlideShow/Components/Pages/Tiled.razor.Settings.cs
+  - rel: realized-by
+    to: id:src.settings_profile
+    pathHint: SimpleImageSlideShow/Models/SettingsProfile.cs
+  - rel: documents
+    to: id:docs.design.sqlite_settings_profiles
+    pathHint: docs/design/sqlite-settings-profiles.md

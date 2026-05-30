@@ -13,23 +13,11 @@ namespace SimpleImageSlideShow.Components.Pages
             UpdateWindowMode(WindowService.CurrentMode, force: true);
             WindowService.ModeChanged += OnWindowModeChanged;
 
-            var settings = await SettingsService.LoadAsync();
-            var delayRange = DelayRange.Normalize(settings.MinDelaySeconds, settings.MaxDelaySeconds);
-            MinDelaySeconds = delayRange.MinSeconds;
-            MaxDelaySeconds = delayRange.MaxSeconds;
-            MinScale = Math.Clamp(settings.TiledMinScale, 0.1, 1.0);
-            MaxScale = Math.Clamp(settings.TiledMaxScale, 0.1, 1.0);
-            if (MaxScale < MinScale) MaxScale = MinScale;
-            DirectoryPath = settings.DirectoryPath;
-            BackgroundColor = NormalizeBackgroundColor(settings.BackgroundColor);
-            TiledCols = settings.TiledCols > 0 ? settings.TiledCols : 6;
-            MinTilePx = settings.MinTilePx > 0 ? settings.MinTilePx : 128;
-            ReuseTtlSeconds = settings.TiledReuseTtlSeconds > 0 ? settings.TiledReuseTtlSeconds : 120;
-            RandomScaleTries = settings.RandomScaleTries > 0 ? settings.RandomScaleTries : 10;
-            ShowClock = settings.ShowTiledClock;
-            AvoidClockOverlap = settings.AvoidTiledClockOverlap;
-            ClockCorner = NormalizeClockCorner(settings.TiledClockCorner);
-            ClockScale = Math.Clamp(settings.TiledClockScale, 0.5, 2.0);
+            var activeProfile = await SettingsService.LoadActiveProfileAsync();
+            ActiveSettingsProfileId = activeProfile.Id;
+            ActiveSettingsProfileName = activeProfile.Name;
+            await RefreshSettingsProfilesAsync();
+            ApplySettingsToState(activeProfile.Settings);
 
             if (!string.IsNullOrWhiteSpace(DirectoryPath) && Directory.Exists(DirectoryPath))
             {

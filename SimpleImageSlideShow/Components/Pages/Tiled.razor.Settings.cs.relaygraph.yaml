@@ -8,6 +8,9 @@ links:
   - rel: realized-by
     to: id:src.app_settings
     pathHint: SimpleImageSlideShow/Models/AppSettings.cs
+  - rel: realized-by
+    to: id:src.settings_profile
+    pathHint: SimpleImageSlideShow/Models/SettingsProfile.cs
   - rel: documents
     to: id:docs.design.sqlite_settings_profiles
     pathHint: docs/design/sqlite-settings-profiles.md
