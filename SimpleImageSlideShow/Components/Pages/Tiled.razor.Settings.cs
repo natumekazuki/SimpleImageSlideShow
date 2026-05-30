@@ -1,16 +1,25 @@
 using Microsoft.AspNetCore.Components;
 using SimpleImageSlideShow.Services;
-using System.Globalization;
 
 namespace SimpleImageSlideShow.Components.Pages
 {
     public sealed partial class Tiled
     {
-        private void OnDelayInput(ChangeEventArgs e)
+        private void OnMinDelayInput(ChangeEventArgs e)
         {
             if (e.Value is string s && uint.TryParse(s, out var v))
             {
-                DelaySeconds = Math.Max(1u, Math.Min(60u, v));
+                MinDelaySeconds = Math.Min(60u, v);
+                if (MaxDelaySeconds < MinDelaySeconds) MaxDelaySeconds = MinDelaySeconds;
+            }
+        }
+
+        private void OnMaxDelayInput(ChangeEventArgs e)
+        {
+            if (e.Value is string s && uint.TryParse(s, out var v))
+            {
+                MaxDelaySeconds = Math.Max(1u, Math.Min(60u, v));
+                if (MaxDelaySeconds < MinDelaySeconds) MinDelaySeconds = MaxDelaySeconds;
             }
         }
 
@@ -78,19 +87,11 @@ namespace SimpleImageSlideShow.Components.Pages
             }
         }
 
-        private async Task OnVolumeInput(ChangeEventArgs e)
-        {
-            if (e.Value is string s && double.TryParse(s, NumberStyles.Number, CultureInfo.InvariantCulture, out var v))
-            {
-                AudioVolumePercent = Math.Clamp(v, 0, 100);
-                await ApplyAudioVolumeToJsAsync();
-            }
-        }
-
         private async Task SaveAndApplyAsync()
         {
             var settings = await SettingsService.LoadAsync();
-            settings.DelaySeconds = DelaySeconds;
+            settings.MinDelaySeconds = MinDelaySeconds;
+            settings.MaxDelaySeconds = MaxDelaySeconds;
             // Fill target is implicit (100%); not persisted anymore
             settings.TiledMinScale = MinScale;
             settings.TiledMaxScale = MaxScale;
@@ -100,7 +101,6 @@ namespace SimpleImageSlideShow.Components.Pages
             settings.MinTilePx = MinTilePx;
             settings.TiledReuseTtlSeconds = ReuseTtlSeconds;
             settings.RandomScaleTries = RandomScaleTries;
-            settings.AudioVolumePercent = AudioVolumePercent;
             settings.ShowTiledClock = ShowClock;
             settings.AvoidTiledClockOverlap = AvoidClockOverlap;
             settings.TiledClockCorner = ClockCorner;

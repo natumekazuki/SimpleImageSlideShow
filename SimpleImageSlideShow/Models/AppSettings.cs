@@ -2,7 +2,8 @@ namespace SimpleImageSlideShow.Models
 {
     public sealed class AppSettings
     {
-        public uint DelaySeconds { get; set; } = 5;
+        public uint MinDelaySeconds { get; set; } = 5;
+        public uint MaxDelaySeconds { get; set; } = 5;
         public string? DirectoryPath { get; set; }
         public string WindowDisplayMode { get; set; } = "FullScreen";
 
@@ -17,8 +18,6 @@ namespace SimpleImageSlideShow.Models
         public bool AvoidTiledClockOverlap { get; set; } = true; // Keep images off the clock overlay
 
         public uint RandomScaleTries { get; set; } = 10;      // number of tries to find a random scale that fits
-
-        public double AudioVolumePercent { get; set; } = 0;    // 0-100 slider, start muted
 
         public string BackgroundColor { get; set; } = "#D3D3D3";
     }

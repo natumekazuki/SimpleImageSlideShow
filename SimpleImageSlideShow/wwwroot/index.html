@@ -66,64 +66,6 @@
           } catch {}
         };
       })();
-
-      window.app.audioVolume = 0;
-      window.app.currentAudioController = null;
-
-      window.app.setAudioVolume = function(volume){
-        try {
-          var num = Number(volume);
-          if (!isFinite(num)) num = 0;
-          num = Math.max(0, Math.min(1, num));
-          window.app.audioVolume = num;
-          if (window.app.currentAudioController && window.app.currentAudioController.audio) {
-            window.app.currentAudioController.audio.volume = num;
-          }
-        } catch {
-          window.app.audioVolume = 0;
-        }
-      };
-
-      window.app.stopAudioPlayback = function(){
-        var ctrl = window.app.currentAudioController;
-        if (!ctrl) return;
-        ctrl.finish(ctrl.audio.currentTime || 0);
-      };
-
-      window.app.playAudioAndWait = function(url){
-        return new Promise(function(resolve){
-          try { window.app.stopAudioPlayback(); } catch {}
-          try {
-            var audio = new Audio(url);
-            audio.preload = 'auto';
-            audio.volume = window.app.audioVolume ?? 0;
-            var controller = {
-              audio: audio,
-              finished: false,
-              finish: function(val){
-                if (controller.finished) return;
-                controller.finished = true;
-                if (window.app.currentAudioController === controller) {
-                  window.app.currentAudioController = null;
-                }
-                try { audio.pause(); } catch {}
-                var result = (typeof val === 'number' && !isNaN(val)) ? val : (audio.duration || audio.currentTime || 0);
-                resolve(result || 0);
-              }
-            };
-            window.app.currentAudioController = controller;
-            audio.addEventListener('ended', function(){ controller.finish(audio.duration || audio.currentTime || 0); });
-            audio.addEventListener('error', function(){ controller.finish(0); });
-            audio.addEventListener('abort', function(){ controller.finish(audio.currentTime || 0); });
-            var playPromise = audio.play();
-            if (playPromise && typeof playPromise.then === 'function') {
-              playPromise.catch(function(){ controller.finish(0); });
-            }
-          } catch {
-            resolve(0);
-          }
-        });
-      };
     </script>
 </body>
 

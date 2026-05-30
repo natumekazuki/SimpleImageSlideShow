@@ -1,0 +1,13 @@
+schemaVersion: 1
+id: src.tiled_settings
+kind: source
+links:
+  - rel: realized-by
+    to: id:src.settings_service
+    pathHint: SimpleImageSlideShow/Services/SettingsService.cs
+  - rel: realized-by
+    to: id:src.app_settings
+    pathHint: SimpleImageSlideShow/Models/AppSettings.cs
+  - rel: documents
+    to: id:docs.design.sqlite_settings_profiles
+    pathHint: docs/design/sqlite-settings-profiles.md

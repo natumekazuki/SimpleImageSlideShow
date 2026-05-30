@@ -1,0 +1,7 @@
+schemaVersion: 1
+id: docs.guide.agents
+kind: guide
+links:
+  - rel: documents
+    to: id:src.app.module
+    pathHint: SimpleImageSlideShow/SimpleImageSlideShow.csproj

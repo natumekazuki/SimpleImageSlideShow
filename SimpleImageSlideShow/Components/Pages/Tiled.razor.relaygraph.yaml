@@ -1,0 +1,16 @@
+schemaVersion: 1
+id: src.tiled_page
+kind: source
+links:
+  - rel: realized-by
+    to: id:src.tiled_settings_panel
+    pathHint: SimpleImageSlideShow/Components/Pages/TiledSettingsPanel.razor
+  - rel: realized-by
+    to: id:src.tiled_lifecycle
+    pathHint: SimpleImageSlideShow/Components/Pages/Tiled.razor.Lifecycle.cs
+  - rel: realized-by
+    to: id:src.tiled_settings
+    pathHint: SimpleImageSlideShow/Components/Pages/Tiled.razor.Settings.cs
+  - rel: realized-by
+    to: id:src.tiled_playback
+    pathHint: SimpleImageSlideShow/Components/Pages/Tiled.razor.Playback.cs

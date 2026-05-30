@@ -30,13 +30,22 @@ Notes: The app is Windows-focused (WebView2, FolderPicker, System.Drawing). Non�
 - No formal test project yet. If adding logic that’s testable, create `SimpleImageSlideShow.Tests` (xUnit), mirror namespaces, and name tests `TypeNameTests.cs`.
 - Run tests with `dotnet test`.
 
+## RelayGraph Guidelines
+- RelayGraph source: `https://github.com/natumekazuki/RelayGraph`.
+- Install the CLI from GitHub when needed: `cargo install --git https://github.com/natumekazuki/RelayGraph --locked --force`.
+- Repository graph declarations are Git-backed source files: `.relaygraph.yaml`, `*.relaygraph.yaml`, and `relaygraph/plugins/*.yaml`.
+- Treat `._relaygraph/` as generated cache/output only; do not edit or commit it.
+- After changing graph declarations or linked files, run `relaygraph validate --json`.
+- When source, tests, docs, or workflows are added, update nearby `*.relaygraph.yaml` sidecars if the resource relationship should be discoverable by RelayGraph.
+
 ## Commit & Pull Request Guidelines
 - Commits: keep focused; use imperative present tense (e.g., "Add tiled placement FIFO"). Optionally follow Conventional Commits (`feat:`, `fix:`, `refactor:`).
 - PRs: include a clear description, linked issue (if any), before/after notes or screenshots (UI), and reproduction/validation steps.
 - Scope: avoid unrelated refactors. Prefer small, reviewable changes.
 
 ## Security & Configuration Tips
-- Settings persist at `FileSystem.AppDataDirectory/SimpleImageSlideShow/settings.json`; do not store secrets.
+- Settings persist at `FileSystem.AppDataDirectory/SimpleImageSlideShow/settings.db`; do not store secrets.
+- Settings are stored in SQLite `settings_profiles`; the active profile is used by the current UI, and profile names are reserved for future switching.
 - Web content accesses local images via WebView2 virtual host `https://appimages.local/`. Keep mapping logic in `IWebViewHostService` implementations.
 - Do not reference Windows‑only types from shared code; guard with interfaces and `#if WINDOWS` where needed.
 

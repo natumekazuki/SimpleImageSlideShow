@@ -1,0 +1,10 @@
+schemaVersion: 1
+id: src.delay_range
+kind: source
+links:
+  - rel: documents
+    to: id:docs.design.sqlite_settings_profiles
+    pathHint: docs/design/sqlite-settings-profiles.md
+  - rel: verified-by
+    to: id:tests.delay_range
+    pathHint: SimpleImageSlideShow.Tests/DelayRangeTests.cs

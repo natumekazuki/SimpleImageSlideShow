@@ -1,0 +1,12 @@
+schemaVersion: 1
+id: validation.windows_tests
+kind: validation
+metadata:
+  command: "dotnet test SimpleImageSlideShow.Tests/SimpleImageSlideShow.Tests.csproj"
+links:
+  - rel: realized-by
+    to: id:tests.settings_service
+    pathHint: SimpleImageSlideShow.Tests/SettingsServiceTests.cs
+  - rel: realized-by
+    to: id:tests.delay_range
+    pathHint: SimpleImageSlideShow.Tests/DelayRangeTests.cs

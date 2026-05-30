@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore MAUI workloads
+        run: dotnet workload restore SimpleImageSlideShow/SimpleImageSlideShow.csproj
+
+      - name: Restore dependencies
+        run: dotnet restore SimpleImageSlideShow.sln
+
+      - name: Build app
+        run: dotnet build SimpleImageSlideShow/SimpleImageSlideShow.csproj -f net8.0-windows10.0.19041.0 --no-restore
+
+      - name: Run tests
+        run: dotnet test SimpleImageSlideShow.Tests/SimpleImageSlideShow.Tests.csproj -f net8.0-windows10.0.19041.0 --no-restore --verbosity normal
+
+  relaygraph:
+    name: RelayGraph validate
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install RelayGraph
+        run: cargo install --git https://github.com/natumekazuki/RelayGraph --locked --force
+
+      - name: Validate graph
+        run: relaygraph validate --json

@@ -2,19 +2,18 @@
     <div id="tiled-panel" class="panel-body">
         <div class="row g-2 align-items-center">
             <div>
-                <label class="form-label">Delay (sec): @DelaySeconds</label>
-                <input type="range" min="1" max="60" value="@DelaySeconds" @oninput="DelayInput" />
+                <label class="form-label">Delay min (sec): @MinDelaySeconds</label>
+                <input type="range" min="0" max="60" value="@MinDelaySeconds" @oninput="MinDelayInput" />
+            </div>
+            <div>
+                <label class="form-label">Delay max (sec): @MaxDelaySeconds</label>
+                <input type="range" min="1" max="60" value="@MaxDelaySeconds" @oninput="MaxDelayInput" />
             </div>
             <div>
                 <label class="form-label">Background</label>
                 <RgbColorPicker Value="@BackgroundColor"
                                 ValueChanged="BackgroundColorSelected"
                                 AriaLabel="Tiled background color" />
-            </div>
-            <div>
-                <label class="form-label">Audio volume: @Math.Round(AudioVolumePercent)%</label>
-                <input type="range" min="0" max="100" value="@((int)Math.Round(AudioVolumePercent))" @oninput="VolumeInput" />
-                <div class="text-muted small">Starts muted until changed</div>
             </div>
             <div>
                 <label class="form-label">Clock</label>
@@ -74,9 +73,9 @@
 </div>
 
 @code {
-    [Parameter] public uint DelaySeconds { get; set; }
+    [Parameter] public uint MinDelaySeconds { get; set; }
+    [Parameter] public uint MaxDelaySeconds { get; set; }
     [Parameter] public string BackgroundColor { get; set; } = string.Empty;
-    [Parameter] public double AudioVolumePercent { get; set; }
     [Parameter] public bool ShowClock { get; set; }
     [Parameter] public bool AvoidClockOverlap { get; set; }
     [Parameter] public string ClockCorner { get; set; } = string.Empty;
@@ -93,9 +92,9 @@
     [Parameter] public bool IsFullScreen { get; set; }
     [Parameter] public bool IsWindowModeChanging { get; set; }
 
-    [Parameter] public EventCallback<ChangeEventArgs> DelayInput { get; set; }
+    [Parameter] public EventCallback<ChangeEventArgs> MinDelayInput { get; set; }
+    [Parameter] public EventCallback<ChangeEventArgs> MaxDelayInput { get; set; }
     [Parameter] public EventCallback<string> BackgroundColorSelected { get; set; }
-    [Parameter] public EventCallback<ChangeEventArgs> VolumeInput { get; set; }
     [Parameter] public EventCallback<ChangeEventArgs> ClockToggleChanged { get; set; }
     [Parameter] public EventCallback<ChangeEventArgs> ClockAvoidOverlapChanged { get; set; }
     [Parameter] public EventCallback<ChangeEventArgs> ClockCornerChanged { get; set; }

@@ -1,0 +1,13 @@
+schemaVersion: 1
+id: tests.settings_service
+kind: test
+links:
+  - rel: verified-by
+    to: id:validation.windows_tests
+    pathHint: SimpleImageSlideShow.Tests/SimpleImageSlideShow.Tests.csproj
+  - rel: realized-by
+    to: id:src.settings_service
+    pathHint: SimpleImageSlideShow/Services/SettingsService.cs
+  - rel: documents
+    to: id:docs.design.sqlite_settings_profiles
+    pathHint: docs/design/sqlite-settings-profiles.md

@@ -159,7 +159,7 @@ namespace SimpleImageSlideShow.Components.Pages
             return (left, top, width, height);
         }
 
-        private TiledItem CreateTiledItem(string path, int row, int col, int rowSpan, int colSpan, double scale, double imgWidth, double imgHeight, string src, string? audioSrc = null)
+        private TiledItem CreateTiledItem(string path, int row, int col, int rowSpan, int colSpan, double scale, double imgWidth, double imgHeight, string src)
         {
             var (left, top, width, height) = ComputeJitteredFrame(row, col, rowSpan, colSpan);
             return new TiledItem
@@ -176,8 +176,7 @@ namespace SimpleImageSlideShow.Components.Pages
                 Scale = scale,
                 ImgWidth = imgWidth,
                 ImgHeight = imgHeight,
-                Src = src,
-                AudioSrc = audioSrc
+                Src = src
             };
         }
 

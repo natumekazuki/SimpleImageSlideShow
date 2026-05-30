@@ -1,0 +1,13 @@
+schemaVersion: 1
+id: src.tiled_lifecycle
+kind: source
+links:
+  - rel: realized-by
+    to: id:src.settings_service
+    pathHint: SimpleImageSlideShow/Services/SettingsService.cs
+  - rel: realized-by
+    to: id:src.windows_image_service
+    pathHint: SimpleImageSlideShow/Platforms/Windows/ImageService.cs
+  - rel: realized-by
+    to: id:src.windows_webview_host
+    pathHint: SimpleImageSlideShow/Platforms/Windows/WebViewHostService.cs

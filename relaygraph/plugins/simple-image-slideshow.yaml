@@ -1,0 +1,39 @@
+schemaVersion: 1
+name: simple-image-slideshow
+resourceKinds:
+  - feature-root
+  - design-doc
+  - module
+  - source
+  - test
+  - validation
+  - guide
+relations:
+  - decomposes-to
+  - realized-by
+  - verified-by
+  - documents
+rules:
+  - when: feature-root
+    requireAnyOutgoing:
+      - decomposes-to
+      - realized-by
+    requireReachableKinds:
+      - design-doc
+      - module
+      - source
+      - test
+      - validation
+  - when: module
+    requireAnyOutgoing:
+      - realized-by
+    requireReachableKinds:
+      - source
+traversal:
+  startKinds:
+    - feature-root
+  relationOrder:
+    - decomposes-to
+    - realized-by
+    - verified-by
+    - documents

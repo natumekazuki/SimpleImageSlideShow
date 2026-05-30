@@ -1,0 +1,16 @@
+schemaVersion: 1
+id: src.maui_program
+kind: source
+links:
+  - rel: realized-by
+    to: id:src.settings_service
+    pathHint: SimpleImageSlideShow/Services/SettingsService.cs
+  - rel: realized-by
+    to: id:src.windows_image_service
+    pathHint: SimpleImageSlideShow/Platforms/Windows/ImageService.cs
+  - rel: realized-by
+    to: id:src.windows_webview_host
+    pathHint: SimpleImageSlideShow/Platforms/Windows/WebViewHostService.cs
+  - rel: realized-by
+    to: id:src.windows_window_service
+    pathHint: SimpleImageSlideShow/Platforms/Windows/WindowService.cs

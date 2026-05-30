@@ -1,0 +1,13 @@
+schemaVersion: 1
+id: tests.delay_range
+kind: test
+links:
+  - rel: verified-by
+    to: id:validation.windows_tests
+    pathHint: SimpleImageSlideShow.Tests/SimpleImageSlideShow.Tests.csproj
+  - rel: realized-by
+    to: id:src.delay_range
+    pathHint: SimpleImageSlideShow/Models/DelayRange.cs
+  - rel: documents
+    to: id:docs.design.sqlite_settings_profiles
+    pathHint: docs/design/sqlite-settings-profiles.md

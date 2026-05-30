@@ -1,4 +1,6 @@
 
+using SimpleImageSlideShow.Models;
+
 namespace SimpleImageSlideShow.Components.Pages
 {
     public sealed partial class Tiled
@@ -54,7 +56,6 @@ namespace SimpleImageSlideShow.Components.Pages
                 _cts?.Cancel();
                 if (_loopTask is not null)
                     await Task.WhenAny(_loopTask, Task.Delay(500));
-                await StopAudioPlaybackAsync();
             }
             catch { }
             finally
@@ -99,7 +100,6 @@ namespace SimpleImageSlideShow.Components.Pages
                 return null;
             }
 
-            item = item with { AudioSrc = GetAudioUrlForImage(imagePath) };
             FillCells(item.Row, item.Col, item.RowSpan, item.ColSpan, true);
             SetOwners(item, true);
             Items.Add(item);
@@ -142,8 +142,7 @@ namespace SimpleImageSlideShow.Components.Pages
                 if (TryPlace(reqRows, reqCols, out var r0, out var c0, avoidClock: avoidClock))
                 {
                     var src0 = BuildVirtualHostUrl(imagePath);
-                    var audio0 = GetAudioUrlForImage(imagePath);
-                    var item0 = CreateTiledItem(imagePath, r0, c0, reqRows, reqCols, rand, sw, sh, src0, audio0);
+                    var item0 = CreateTiledItem(imagePath, r0, c0, reqRows, reqCols, rand, sw, sh, src0);
                     FillCells(item0.Row, item0.Col, item0.RowSpan, item0.ColSpan, true);
                     SetOwners(item0, true);
                     Items.Add(item0);
@@ -162,8 +161,7 @@ namespace SimpleImageSlideShow.Components.Pages
                     if (reqColsD <= Cols && reqRowsD <= Rows && TryPlace(reqRowsD, reqColsD, out var rD, out var cD, avoidClock: avoidClock))
                     {
                         var srcD = BuildVirtualHostUrl(imagePath);
-                        var audioD = GetAudioUrlForImage(imagePath);
-                        var itemD = CreateTiledItem(imagePath, rD, cD, reqRowsD, reqColsD, rtry, swD, shD, srcD, audioD);
+                        var itemD = CreateTiledItem(imagePath, rD, cD, reqRowsD, reqColsD, rtry, swD, shD, srcD);
                         FillCells(itemD.Row, itemD.Col, itemD.RowSpan, itemD.ColSpan, true);
                         SetOwners(itemD, true);
                         Items.Add(itemD);
@@ -208,8 +206,7 @@ namespace SimpleImageSlideShow.Components.Pages
 
                 // place new item at the precomputed location
                 var src = BuildVirtualHostUrl(imagePath);
-                var audio = GetAudioUrlForImage(imagePath);
-                var item = CreateTiledItem(imagePath, rr, cc, reqRows, reqCols, rand, sw, sh, src, audio);
+                var item = CreateTiledItem(imagePath, rr, cc, reqRows, reqCols, rand, sw, sh, src);
                 FillCells(item.Row, item.Col, item.RowSpan, item.ColSpan, true);
                 SetOwners(item, true);
                 Items.Add(item);
@@ -298,22 +295,8 @@ namespace SimpleImageSlideShow.Components.Pages
 
         private async Task WaitForNextTickAsync(TiledItem? lastItem, CancellationToken token)
         {
-            var delayTask = Task.Delay(TimeSpan.FromSeconds(Math.Max(1, DelaySeconds)), token);
-            if (lastItem?.AudioSrc is string audio && !string.IsNullOrWhiteSpace(audio) && AudioVolume > AudioSilenceEpsilon)
-            {
-                var audioTask = PlayAudioAndWaitAsync(audio, token);
-                try
-                {
-                    await Task.WhenAll(delayTask, audioTask);
-                }
-                catch (OperationCanceledException) { throw; }
-                catch
-                {
-                    await delayTask;
-                }
-                return;
-            }
-            await delayTask;
+            var delaySeconds = DelayRange.Normalize(MinDelaySeconds, MaxDelaySeconds).NextDelaySeconds();
+            await Task.Delay(TimeSpan.FromSeconds(delaySeconds), token);
         }
 
     }

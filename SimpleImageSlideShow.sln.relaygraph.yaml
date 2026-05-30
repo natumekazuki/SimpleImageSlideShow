@@ -1,0 +1,5 @@
+schemaVersion: 1
+id: validation.windows_build
+kind: validation
+metadata:
+  command: "dotnet build SimpleImageSlideShow/SimpleImageSlideShow.csproj -f net8.0-windows10.0.19041.0"

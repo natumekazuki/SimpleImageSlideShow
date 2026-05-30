@@ -1,0 +1,13 @@
+schemaVersion: 1
+id: docs.feature.app
+kind: feature-root
+links:
+  - rel: decomposes-to
+    to: id:docs.design.sqlite_settings_profiles
+    pathHint: docs/design/sqlite-settings-profiles.md
+  - rel: decomposes-to
+    to: id:src.app.module
+    pathHint: SimpleImageSlideShow/SimpleImageSlideShow.csproj
+  - rel: documents
+    to: id:docs.guide.agents
+    pathHint: AGENTS.md

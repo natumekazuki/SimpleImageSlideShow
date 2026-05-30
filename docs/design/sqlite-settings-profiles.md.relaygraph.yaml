@@ -1,0 +1,25 @@
+schemaVersion: 1
+id: docs.design.sqlite_settings_profiles
+kind: design-doc
+links:
+  - rel: realized-by
+    to: id:src.settings_service
+    pathHint: SimpleImageSlideShow/Services/SettingsService.cs
+  - rel: realized-by
+    to: id:src.app_settings
+    pathHint: SimpleImageSlideShow/Models/AppSettings.cs
+  - rel: realized-by
+    to: id:src.tiled_settings
+    pathHint: SimpleImageSlideShow/Components/Pages/Tiled.razor.Settings.cs
+  - rel: realized-by
+    to: id:src.tiled_playback
+    pathHint: SimpleImageSlideShow/Components/Pages/Tiled.razor.Playback.cs
+  - rel: verified-by
+    to: id:tests.settings_service
+    pathHint: SimpleImageSlideShow.Tests/SettingsServiceTests.cs
+  - rel: verified-by
+    to: id:tests.delay_range
+    pathHint: SimpleImageSlideShow.Tests/DelayRangeTests.cs
+  - rel: verified-by
+    to: id:validation.windows_tests
+    pathHint: SimpleImageSlideShow.Tests/SimpleImageSlideShow.Tests.csproj
