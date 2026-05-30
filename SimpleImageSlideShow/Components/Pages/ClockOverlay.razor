@@ -1,0 +1,19 @@
+@if (ShowClock)
+{
+    var clockStyle = $"--clock-width:{ClockWidth}px;--clock-height:{ClockHeight}px;--clock-scale:{ClockScale};";
+    <div id="clock-overlay" class="clock-overlay @CornerCssClass @(Overlapped ? "dim" : "bright")" style="@clockStyle">
+        <div class="clock-time">@Time</div>
+        <div class="clock-date">@Date</div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool ShowClock { get; set; }
+    [Parameter] public double ClockWidth { get; set; }
+    [Parameter] public double ClockHeight { get; set; }
+    [Parameter] public double ClockScale { get; set; }
+    [Parameter] public string CornerCssClass { get; set; } = string.Empty;
+    [Parameter] public bool Overlapped { get; set; }
+    [Parameter] public string Time { get; set; } = string.Empty;
+    [Parameter] public string Date { get; set; } = string.Empty;
+}
