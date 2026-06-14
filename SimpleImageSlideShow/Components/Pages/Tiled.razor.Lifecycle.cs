@@ -56,6 +56,7 @@ namespace SimpleImageSlideShow.Components.Pages
                 {
                     _selfRef = DotNetObjectReference.Create(this);
                     _resizeObj = await JS.InvokeAsync<IJSObjectReference>("window.app.addResizeListener", _selfRef);
+                    _keyboardObj = await JS.InvokeAsync<IJSObjectReference>("window.app.addSkipDelayKeyListener", _selfRef);
                 }
                 catch { }
 
@@ -77,6 +78,7 @@ namespace SimpleImageSlideShow.Components.Pages
         {
             await StopAsync();
             try { if (_resizeObj is not null) await _resizeObj.InvokeVoidAsync("dispose"); } catch { }
+            try { if (_keyboardObj is not null) await _keyboardObj.InvokeVoidAsync("dispose"); } catch { }
             try { _selfRef?.Dispose(); } catch { }
             try { _clockTimer?.Dispose(); } catch { }
             CancelClockLayoutUpdate();
