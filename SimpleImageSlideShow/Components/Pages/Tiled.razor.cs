@@ -124,7 +124,10 @@ namespace SimpleImageSlideShow.Components.Pages
         private CancellationTokenSource? _cts;
         private Task? _loopTask;
         private IJSObjectReference? _resizeObj;
+        private IJSObjectReference? _keyboardObj;
         private DotNetObjectReference<Tiled>? _selfRef;
+        private readonly object _delaySkipLock = new();
+        private CancellationTokenSource? _delaySkipCts;
         private const int PlanCapacity = 5; // plan up to 5 steps ahead
         private uint RandomScaleTries { get; set; } = 10; // random ratio attempts per placement
         private const double ShrinkGuardThreshold = 0.25; // 原寸未満回避を適用する長辺比率の上限

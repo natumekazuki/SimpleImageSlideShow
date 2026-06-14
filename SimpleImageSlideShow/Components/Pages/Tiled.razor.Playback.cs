@@ -1,4 +1,5 @@
 
+using Microsoft.JSInterop;
 using SimpleImageSlideShow.Models;
 
 namespace SimpleImageSlideShow.Components.Pages
@@ -27,7 +28,10 @@ namespace SimpleImageSlideShow.Components.Pages
                     }
                     catch (OperationCanceledException)
                     {
-                        break;
+                        if (token.IsCancellationRequested)
+                        {
+                            break;
+                        }
                     }
                 }
                 shouldWait = true;
@@ -54,6 +58,7 @@ namespace SimpleImageSlideShow.Components.Pages
             try
             {
                 _cts?.Cancel();
+                CancelCurrentDelay();
                 if (_loopTask is not null)
                     await Task.WhenAny(_loopTask, Task.Delay(500));
             }
@@ -296,7 +301,52 @@ namespace SimpleImageSlideShow.Components.Pages
         private async Task WaitForNextTickAsync(TiledItem? lastItem, CancellationToken token)
         {
             var delaySeconds = DelayRange.Normalize(MinDelaySeconds, MaxDelaySeconds).NextDelaySeconds();
-            await Task.Delay(TimeSpan.FromSeconds(delaySeconds), token);
+            using var delaySkipCts = new CancellationTokenSource();
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(token, delaySkipCts.Token);
+
+            lock (_delaySkipLock)
+            {
+                _delaySkipCts = delaySkipCts;
+            }
+
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(delaySeconds), linkedCts.Token);
+            }
+            finally
+            {
+                lock (_delaySkipLock)
+                {
+                    if (ReferenceEquals(_delaySkipCts, delaySkipCts))
+                    {
+                        _delaySkipCts = null;
+                    }
+                }
+            }
+        }
+
+        [JSInvokable]
+        public Task SkipCurrentDelayAsync()
+        {
+            CancelCurrentDelay();
+            return Task.CompletedTask;
+        }
+
+        private void CancelCurrentDelay()
+        {
+            CancellationTokenSource? cts;
+            lock (_delaySkipLock)
+            {
+                cts = _delaySkipCts;
+            }
+
+            try
+            {
+                cts?.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
         }
 
     }

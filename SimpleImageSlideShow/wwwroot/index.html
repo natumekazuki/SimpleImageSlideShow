@@ -38,6 +38,27 @@
         return { width: window.innerWidth, height: window.innerHeight };
       };
 
+      window.app.addSkipDelayKeyListener = function(dotnetRef){
+        function isEditableTarget(target){
+          if(!target) return false;
+          var tagName = (target.tagName || '').toLowerCase();
+          return tagName === 'input' ||
+            tagName === 'textarea' ||
+            tagName === 'select' ||
+            tagName === 'button' ||
+            target.isContentEditable;
+        }
+
+        function h(e){
+          if(e.defaultPrevented || e.repeat || e.code !== 'Space' || isEditableTarget(e.target)) return;
+          e.preventDefault();
+          dotnetRef.invokeMethodAsync('SkipCurrentDelayAsync').catch(function(){});
+        }
+
+        document.addEventListener('keydown', h);
+        return { dispose: function(){ document.removeEventListener('keydown', h); } };
+      };
+
       window.app.enablePanelInteraction = function(panelId, dotnetRef){
         var panel = document.getElementById(panelId);
         if(!panel) return;
