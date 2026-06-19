@@ -49,7 +49,20 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install RelayGraph
-        run: cargo install --git https://github.com/natumekazuki/RelayGraph --locked --force
+        shell: pwsh
+        run: |
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            cargo install --git https://github.com/natumekazuki/RelayGraph --locked --force
+            if ($LASTEXITCODE -eq 0) {
+              exit 0
+            }
+
+            if ($attempt -lt 3) {
+              Start-Sleep -Seconds (10 * $attempt)
+            }
+          }
+
+          exit $LASTEXITCODE
 
       - name: Validate graph
         run: relaygraph validate --json
