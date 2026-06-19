@@ -14,3 +14,6 @@ links:
   - rel: realized-by
     to: id:src.tiled_playback
     pathHint: SimpleImageSlideShow/Components/Pages/Tiled.razor.Playback.cs
+  - rel: realized-by
+    to: id:src.tiled_keyboard
+    pathHint: SimpleImageSlideShow/Components/Pages/Tiled.razor.Keyboard.cs

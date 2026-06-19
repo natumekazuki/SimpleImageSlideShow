@@ -34,11 +34,18 @@ namespace SimpleImageSlideShow.Components.Pages
             }
 
             var item = CreateTiledItem(plan.Path, plan.Row, plan.Col, plan.RowSpan, plan.ColSpan, plan.Scale, plan.ImgWidth, plan.ImgHeight, plan.Src);
-            FillCells(item.Row, item.Col, item.RowSpan, item.ColSpan, true);
-            SetOwners(item, true);
-            Items.Add(item);
-            UsedPaths.Add(plan.Path);
-            AddCooldown(plan.Path);
+            if (plan.Moves.Count > 0)
+            {
+                ApplyDefragPlacement(item, plan.Moves);
+            }
+            else
+            {
+                FillCells(item.Row, item.Col, item.RowSpan, item.ColSpan, true);
+                SetOwners(item, true);
+                Items.Add(item);
+                UsedPaths.Add(plan.Path);
+                AddCooldown(plan.Path);
+            }
 
             try { await EnsurePlanAsync(); } catch { }
             return item;
@@ -69,8 +76,25 @@ namespace SimpleImageSlideShow.Components.Pages
                     simItems.RemoveAt(0);
                 }
                 // Add planned item
+                foreach (var move in ps.Moves)
+                {
+                    var moveIndex = simItems.FindIndex(item => string.Equals(item.Path, move.Path, StringComparison.OrdinalIgnoreCase));
+                    if (moveIndex < 0) continue;
+
+                    var it = simItems[moveIndex];
+                    FillCellsSim(it.Row, it.Col, it.RowSpan, it.ColSpan, occSim, false);
+                    simItems[moveIndex] = it with { Row = move.Row, Col = move.Col };
+                }
                 FillCellsSim(ps.Row, ps.Col, ps.RowSpan, ps.ColSpan, occSim, true);
                 simItems.Add(new SimItem(ps.Path, ps.Row, ps.Col, ps.RowSpan, ps.ColSpan));
+                foreach (var move in ps.Moves)
+                {
+                    var it = simItems.FirstOrDefault(item => string.Equals(item.Path, move.Path, StringComparison.OrdinalIgnoreCase));
+                    if (it is not null)
+                    {
+                        FillCellsSim(it.Row, it.Col, it.RowSpan, it.ColSpan, occSim, true);
+                    }
+                }
                 plannedPaths.Add(ps.Path);
             }
 
@@ -92,8 +116,25 @@ namespace SimpleImageSlideShow.Components.Pages
                     FillCellsSim(it.Row, it.Col, it.RowSpan, it.ColSpan, occSim, false);
                     simItems.RemoveAt(0);
                 }
+                foreach (var move in plan.Moves)
+                {
+                    var moveIndex = simItems.FindIndex(item => string.Equals(item.Path, move.Path, StringComparison.OrdinalIgnoreCase));
+                    if (moveIndex < 0) continue;
+
+                    var it = simItems[moveIndex];
+                    FillCellsSim(it.Row, it.Col, it.RowSpan, it.ColSpan, occSim, false);
+                    simItems[moveIndex] = it with { Row = move.Row, Col = move.Col };
+                }
                 FillCellsSim(plan.Row, plan.Col, plan.RowSpan, plan.ColSpan, occSim, true);
                 simItems.Add(new SimItem(plan.Path, plan.Row, plan.Col, plan.RowSpan, plan.ColSpan));
+                foreach (var move in plan.Moves)
+                {
+                    var it = simItems.FirstOrDefault(item => string.Equals(item.Path, move.Path, StringComparison.OrdinalIgnoreCase));
+                    if (it is not null)
+                    {
+                        FillCellsSim(it.Row, it.Col, it.RowSpan, it.ColSpan, occSim, true);
+                    }
+                }
                 usedForPlan.Add(plan.Path);
                 try { await PreloadImageUrlAsync(plan.Src); } catch { }
             }
@@ -137,6 +178,24 @@ namespace SimpleImageSlideShow.Components.Pages
                         ImgHeight = sh,
                         Src = BuildVirtualHostUrl(imagePath),
                         RemoveCount = 0
+                    };
+                }
+
+                if (TryComputeRandomDefragForPlacementSim(reqRows, reqCols, occSim, simItems, out var defragRow, out var defragCol, out var moves, avoidClock: avoidClock))
+                {
+                    return new PlannedStep
+                    {
+                        Path = imagePath,
+                        Row = defragRow,
+                        Col = defragCol,
+                        RowSpan = reqRows,
+                        ColSpan = reqCols,
+                        Scale = rand,
+                        ImgWidth = sw,
+                        ImgHeight = sh,
+                        Src = BuildVirtualHostUrl(imagePath),
+                        RemoveCount = 0,
+                        Moves = moves
                     };
                 }
 
@@ -226,7 +285,7 @@ namespace SimpleImageSlideShow.Components.Pages
             var now = DateTime.UtcNow;
             for (int i = 0; i < tries; i++)
             {
-                var p = ImageService.GetRandomImagePath();
+                var p = TakeRandomImageFromStock(additionallyUsed);
                 if (string.IsNullOrWhiteSpace(p)) return string.Empty;
                 if (UsedPaths.Contains(p) || additionallyUsed.Contains(p)) { await Task.Yield(); continue; }
                 if (_cooldown.TryGetValue(p, out var until) && until > now) { await Task.Yield(); continue; }
@@ -234,7 +293,7 @@ namespace SimpleImageSlideShow.Components.Pages
             }
             for (int i = 0; i < tries; i++)
             {
-                var p = ImageService.GetRandomImagePath();
+                var p = TakeRandomImageFromStock(additionallyUsed);
                 if (string.IsNullOrWhiteSpace(p)) return string.Empty;
                 if (!UsedPaths.Contains(p) && !additionallyUsed.Contains(p)) return p;
                 await Task.Yield();

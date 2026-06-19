@@ -21,7 +21,7 @@ namespace SimpleImageSlideShow.Components.Pages
 
             if (!string.IsNullOrWhiteSpace(DirectoryPath) && Directory.Exists(DirectoryPath))
             {
-                ImageService.LoadImages(DirectoryPath);
+                SetImageStock(ImageService.LoadImages(DirectoryPath));
                 WebViewHost.MapImagesFolder(DirectoryPath);
             }
             else

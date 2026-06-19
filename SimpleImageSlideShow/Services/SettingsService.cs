@@ -265,6 +265,8 @@ namespace SimpleImageSlideShow.Services
                         min_tile_px INTEGER NOT NULL,
                         tiled_reuse_ttl_seconds INTEGER NOT NULL,
                         random_scale_tries INTEGER NOT NULL,
+                        defrag_target_count INTEGER NOT NULL DEFAULT 3,
+                        defrag_tries INTEGER NOT NULL DEFAULT 20,
                         show_tiled_clock INTEGER NOT NULL,
                         tiled_clock_corner TEXT NOT NULL,
                         tiled_clock_scale REAL NOT NULL,
@@ -279,6 +281,9 @@ namespace SimpleImageSlideShow.Services
                     """;
                 await command.ExecuteNonQueryAsync();
             }
+
+            await EnsureColumnAsync(connection, "defrag_target_count", "INTEGER NOT NULL DEFAULT 3");
+            await EnsureColumnAsync(connection, "defrag_tries", "INTEGER NOT NULL DEFAULT 20");
 
             await using (var command = connection.CreateCommand())
             {
@@ -329,6 +334,8 @@ namespace SimpleImageSlideShow.Services
                     min_tile_px,
                     tiled_reuse_ttl_seconds,
                     random_scale_tries,
+                    defrag_target_count,
+                    defrag_tries,
                     show_tiled_clock,
                     tiled_clock_corner,
                     tiled_clock_scale,
@@ -354,11 +361,13 @@ namespace SimpleImageSlideShow.Services
                 MinTilePx = ToInt32(reader.GetInt64(10), 128),
                 TiledReuseTtlSeconds = ToInt32(reader.GetInt64(11), 120),
                 RandomScaleTries = ToUInt32(reader.GetInt64(12), 10),
-                ShowTiledClock = reader.GetInt64(13) != 0,
-                TiledClockCorner = reader.GetString(14),
-                TiledClockScale = reader.GetDouble(15),
-                AvoidTiledClockOverlap = reader.GetInt64(16) != 0,
-                BackgroundColor = reader.GetString(17)
+                DefragTargetCount = ToUInt32(reader.GetInt64(13), 3),
+                DefragTries = ToUInt32(reader.GetInt64(14), 20),
+                ShowTiledClock = reader.GetInt64(15) != 0,
+                TiledClockCorner = reader.GetString(16),
+                TiledClockScale = reader.GetDouble(17),
+                AvoidTiledClockOverlap = reader.GetInt64(18) != 0,
+                BackgroundColor = reader.GetString(19)
             });
             return new SettingsProfile(reader.GetString(0), reader.GetString(1), reader.GetInt64(2) != 0, settings);
         }
@@ -414,6 +423,8 @@ namespace SimpleImageSlideShow.Services
                     min_tile_px,
                     tiled_reuse_ttl_seconds,
                     random_scale_tries,
+                    defrag_target_count,
+                    defrag_tries,
                     show_tiled_clock,
                     tiled_clock_corner,
                     tiled_clock_scale,
@@ -436,6 +447,8 @@ namespace SimpleImageSlideShow.Services
                     $min_tile_px,
                     $tiled_reuse_ttl_seconds,
                     $random_scale_tries,
+                    $defrag_target_count,
+                    $defrag_tries,
                     $show_tiled_clock,
                     $tiled_clock_corner,
                     $tiled_clock_scale,
@@ -457,6 +470,8 @@ namespace SimpleImageSlideShow.Services
                     min_tile_px = excluded.min_tile_px,
                     tiled_reuse_ttl_seconds = excluded.tiled_reuse_ttl_seconds,
                     random_scale_tries = excluded.random_scale_tries,
+                    defrag_target_count = excluded.defrag_target_count,
+                    defrag_tries = excluded.defrag_tries,
                     show_tiled_clock = excluded.show_tiled_clock,
                     tiled_clock_corner = excluded.tiled_clock_corner,
                     tiled_clock_scale = excluded.tiled_clock_scale,
@@ -477,6 +492,8 @@ namespace SimpleImageSlideShow.Services
             command.Parameters.AddWithValue("$min_tile_px", settings.MinTilePx);
             command.Parameters.AddWithValue("$tiled_reuse_ttl_seconds", settings.TiledReuseTtlSeconds);
             command.Parameters.AddWithValue("$random_scale_tries", settings.RandomScaleTries);
+            command.Parameters.AddWithValue("$defrag_target_count", settings.DefragTargetCount);
+            command.Parameters.AddWithValue("$defrag_tries", settings.DefragTries);
             command.Parameters.AddWithValue("$show_tiled_clock", settings.ShowTiledClock ? 1 : 0);
             command.Parameters.AddWithValue("$tiled_clock_corner", settings.TiledClockCorner);
             command.Parameters.AddWithValue("$tiled_clock_scale", settings.TiledClockScale);
@@ -547,8 +564,30 @@ namespace SimpleImageSlideShow.Services
                 TiledClockScale = settings.TiledClockScale > 0 ? settings.TiledClockScale : 1.0,
                 AvoidTiledClockOverlap = settings.AvoidTiledClockOverlap,
                 RandomScaleTries = settings.RandomScaleTries > 0 ? settings.RandomScaleTries : 10,
+                DefragTargetCount = Math.Min(12u, settings.DefragTargetCount),
+                DefragTries = Math.Min(200u, settings.DefragTries),
                 BackgroundColor = string.IsNullOrWhiteSpace(settings.BackgroundColor) ? "#D3D3D3" : settings.BackgroundColor
             };
+        }
+
+        private static async Task EnsureColumnAsync(SqliteConnection connection, string columnName, string definition)
+        {
+            await using (var checkCommand = connection.CreateCommand())
+            {
+                checkCommand.CommandText = "PRAGMA table_info(settings_profiles);";
+                await using var reader = await checkCommand.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    if (string.Equals(reader.GetString(1), columnName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return;
+                    }
+                }
+            }
+
+            await using var alterCommand = connection.CreateCommand();
+            alterCommand.CommandText = $"ALTER TABLE settings_profiles ADD COLUMN {columnName} {definition};";
+            await alterCommand.ExecuteNonQueryAsync();
         }
 
         private static int ToInt32(long value, int fallback)

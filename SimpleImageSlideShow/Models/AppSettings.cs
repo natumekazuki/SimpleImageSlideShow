@@ -18,6 +18,8 @@ namespace SimpleImageSlideShow.Models
         public bool AvoidTiledClockOverlap { get; set; } = true; // Keep images off the clock overlay
 
         public uint RandomScaleTries { get; set; } = 10;      // number of tries to find a random scale that fits
+        public uint DefragTargetCount { get; set; } = 3;      // number of random tiles to reposition before shrinking/removal
+        public uint DefragTries { get; set; } = 20;           // number of bounded repositioning simulations
 
         public string BackgroundColor { get; set; } = "#D3D3D3";
     }

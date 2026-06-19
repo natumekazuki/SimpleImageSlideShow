@@ -53,6 +53,8 @@ namespace SimpleImageSlideShow.Components.Pages
 
         private List<TiledItem> Items { get; set; } = [];
         private HashSet<string> UsedPaths { get; } = new(StringComparer.OrdinalIgnoreCase);
+        private List<string> ImageStock { get; set; } = [];
+        private List<string> UnusedImageStock { get; } = [];
 
         private uint MinDelaySeconds { get; set; } = 5;
         private uint MaxDelaySeconds { get; set; } = 5;
@@ -130,6 +132,8 @@ namespace SimpleImageSlideShow.Components.Pages
         private CancellationTokenSource? _delaySkipCts;
         private const int PlanCapacity = 5; // plan up to 5 steps ahead
         private uint RandomScaleTries { get; set; } = 10; // random ratio attempts per placement
+        private uint DefragTargetCount { get; set; } = 3;
+        private uint DefragTries { get; set; } = 20;
         private const double ShrinkGuardThreshold = 0.25; // 原寸未満回避を適用する長辺比率の上限
         private const double PositionJitterRatio = 0.22; // タイル枠内で遊ばせる割合（格子を細かくせずランダム化）
         private const double PositionJitterMaxPx = 64;
@@ -147,7 +151,10 @@ namespace SimpleImageSlideShow.Components.Pages
             public required double ImgHeight { get; init; }
             public required string Src { get; init; }
             public int RemoveCount { get; init; }
+            public IReadOnlyList<PlannedMove> Moves { get; init; } = [];
         }
+
+        private record PlannedMove(string Path, int Row, int Col);
 
         private readonly List<PlannedStep> _planQueue = new();
         private TiledItem? _lastTickItem;
