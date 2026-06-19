@@ -12,7 +12,7 @@ namespace SimpleImageSlideShow.Components.Pages
             return total == 0 ? 0 : (100.0 * used / total);
         }
 
-        private bool TryComputeFifoRemovalForPlacement(int reqRows, int reqCols, out int removeCount, out int row, out int col, bool avoidClock)
+        private bool TryComputeFifoRemovalForPlacement(int reqRows, int reqCols, out int removeCount, out int row, out int col, bool avoidClock, int minRemoveCount = 0)
         {
             removeCount = 0; row = col = -1;
             if (Occupied is null) return false;
@@ -24,7 +24,7 @@ namespace SimpleImageSlideShow.Components.Pages
                     occSim[r, c] = Occupied[r, c];
 
             // quick success without removals
-            if (TryPlaceSim(reqRows, reqCols, occSim, out row, out col, avoidClock))
+            if (minRemoveCount == 0 && TryPlaceSim(reqRows, reqCols, occSim, out row, out col, avoidClock))
             {
                 removeCount = 0;
                 return true;
@@ -35,7 +35,7 @@ namespace SimpleImageSlideShow.Components.Pages
             {
                 var it = Items[k - 1];
                 FillCellsSim(it.Row, it.Col, it.RowSpan, it.ColSpan, occSim, false);
-                if (TryPlaceSim(reqRows, reqCols, occSim, out row, out col, avoidClock))
+                if (k >= minRemoveCount && TryPlaceSim(reqRows, reqCols, occSim, out row, out col, avoidClock))
                 {
                     removeCount = k;
                     return true;
@@ -43,6 +43,93 @@ namespace SimpleImageSlideShow.Components.Pages
             }
 
             return false;
+        }
+
+        private bool TryComputeRandomDefragForPlacement(int reqRows, int reqCols, out int row, out int col, out IReadOnlyList<PlannedMove> moves, bool avoidClock)
+        {
+            row = col = -1;
+            moves = [];
+            if (Occupied is null || Items.Count == 0 || DefragTargetCount == 0 || DefragTries == 0) return false;
+
+            var simItems = Items.Select(it => new SimItem(it.Path, it.Row, it.Col, it.RowSpan, it.ColSpan)).ToList();
+            return TryComputeRandomDefragForPlacementSim(reqRows, reqCols, Occupied, simItems, out row, out col, out moves, avoidClock);
+        }
+
+        private bool TryComputeRandomDefragForPlacementSim(
+            int reqRows,
+            int reqCols,
+            bool[,] occ,
+            List<SimItem> simItems,
+            out int row,
+            out int col,
+            out IReadOnlyList<PlannedMove> moves,
+            bool avoidClock)
+        {
+            row = col = -1;
+            moves = [];
+            if (simItems.Count == 0 || DefragTargetCount == 0 || DefragTries == 0) return false;
+
+            int rows = occ.GetLength(0);
+            int cols = occ.GetLength(1);
+            int moveCount = Math.Min((int)DefragTargetCount, simItems.Count);
+
+            for (int attempt = 0; attempt < DefragTries; attempt++)
+            {
+                var selected = PickRandomSimItems(simItems, moveCount);
+                if (selected.Count == 0) continue;
+
+                var occSim = new bool[rows, cols];
+                for (int r = 0; r < rows; r++)
+                    for (int c = 0; c < cols; c++)
+                        occSim[r, c] = occ[r, c];
+
+                foreach (var it in selected)
+                {
+                    FillCellsSim(it.Row, it.Col, it.RowSpan, it.ColSpan, occSim, false);
+                }
+
+                if (!TryPlaceSim(reqRows, reqCols, occSim, out var newRow, out var newCol, avoidClock)) continue;
+                FillCellsSim(newRow, newCol, reqRows, reqCols, occSim, true);
+
+                var plannedMoves = new List<PlannedMove>(selected.Count);
+                var failed = false;
+                foreach (var it in selected)
+                {
+                    if (!TryPlaceSim(it.RowSpan, it.ColSpan, occSim, out var moveRow, out var moveCol, avoidClock))
+                    {
+                        failed = true;
+                        break;
+                    }
+
+                    FillCellsSim(moveRow, moveCol, it.RowSpan, it.ColSpan, occSim, true);
+                    plannedMoves.Add(new PlannedMove(it.Path, moveRow, moveCol));
+                }
+
+                if (failed) continue;
+
+                row = newRow;
+                col = newCol;
+                moves = plannedMoves;
+                return true;
+            }
+
+            return false;
+        }
+
+        private static List<SimItem> PickRandomSimItems(List<SimItem> simItems, int count)
+        {
+            var selected = new List<SimItem>(count);
+            var used = new HashSet<int>();
+            while (selected.Count < count && used.Count < simItems.Count)
+            {
+                var index = Random.Shared.Next(simItems.Count);
+                if (used.Add(index))
+                {
+                    selected.Add(simItems[index]);
+                }
+            }
+
+            return selected;
         }
 
         private bool TryPlaceSim(int rowSpan, int colSpan, bool[,] occ, out int row, out int col, bool avoidClock)
@@ -178,6 +265,39 @@ namespace SimpleImageSlideShow.Components.Pages
                 ImgHeight = imgHeight,
                 Src = src
             };
+        }
+
+        private void ApplyDefragPlacement(TiledItem newItem, IReadOnlyList<PlannedMove> moves)
+        {
+            var moveItems = moves
+                .Select(move => (Move: move, Item: Items.FirstOrDefault(item => string.Equals(item.Path, move.Path, StringComparison.OrdinalIgnoreCase))))
+                .Where(entry => entry.Item is not null)
+                .ToList();
+
+            foreach (var (_, item) in moveItems)
+            {
+                FillCells(item!.Row, item.Col, item.RowSpan, item.ColSpan, false);
+                SetOwners(item, false);
+            }
+
+            FillCells(newItem.Row, newItem.Col, newItem.RowSpan, newItem.ColSpan, true);
+            SetOwners(newItem, true);
+            Items.Add(newItem);
+            UsedPaths.Add(newItem.Path);
+            AddCooldown(newItem.Path);
+
+            foreach (var (move, item) in moveItems)
+            {
+                item!.Row = move.Row;
+                item.Col = move.Col;
+                var (left, top, width, height) = ComputeJitteredFrame(move.Row, move.Col, item.RowSpan, item.ColSpan);
+                item.Left = left;
+                item.Top = top;
+                item.Width = width;
+                item.Height = height;
+                FillCells(item.Row, item.Col, item.RowSpan, item.ColSpan, true);
+                SetOwners(item, true);
+            }
         }
 
         private bool TryPlaceAreaBasedNoUpscale(double origW, double origH, string filePath, double lo, double hi, double initialRatio, out TiledItem item, bool avoidClock)

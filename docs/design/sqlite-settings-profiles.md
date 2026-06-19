@@ -23,7 +23,7 @@
 - `min_delay_seconds`: タイル追加待機時間の最小秒数。下限は 0。
 - `max_delay_seconds`: タイル追加待機時間の最大秒数。下限は 1。
 - `window_display_mode`: 表示モード。
-- `tiled_min_scale`, `tiled_max_scale`, `tiled_cols`, `min_tile_px`, `tiled_reuse_ttl_seconds`, `random_scale_tries`: Tiled 表示設定。
+- `tiled_min_scale`, `tiled_max_scale`, `tiled_cols`, `min_tile_px`, `tiled_reuse_ttl_seconds`, `random_scale_tries`, `defrag_target_count`, `defrag_tries`: Tiled 表示設定。
 - `show_tiled_clock`, `tiled_clock_corner`, `tiled_clock_scale`, `avoid_tiled_clock_overlap`: 時計表示設定。
 - `background_color`: 背景色。
 - `created_at`, `updated_at`: UTC ISO-8601 文字列。

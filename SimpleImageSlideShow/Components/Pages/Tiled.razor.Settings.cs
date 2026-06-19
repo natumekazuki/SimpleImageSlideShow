@@ -30,6 +30,8 @@ namespace SimpleImageSlideShow.Components.Pages
             MinTilePx = settings.MinTilePx > 0 ? settings.MinTilePx : 128;
             ReuseTtlSeconds = settings.TiledReuseTtlSeconds > 0 ? settings.TiledReuseTtlSeconds : 120;
             RandomScaleTries = settings.RandomScaleTries > 0 ? settings.RandomScaleTries : 10;
+            DefragTargetCount = Math.Min(12u, settings.DefragTargetCount);
+            DefragTries = Math.Min(200u, settings.DefragTries);
             ShowClock = settings.ShowTiledClock;
             AvoidClockOverlap = settings.AvoidTiledClockOverlap;
             ClockCorner = NormalizeClockCorner(settings.TiledClockCorner);
@@ -50,6 +52,8 @@ namespace SimpleImageSlideShow.Components.Pages
                 MinTilePx = MinTilePx,
                 TiledReuseTtlSeconds = ReuseTtlSeconds,
                 RandomScaleTries = RandomScaleTries,
+                DefragTargetCount = DefragTargetCount,
+                DefragTries = DefragTries,
                 ShowTiledClock = ShowClock,
                 AvoidTiledClockOverlap = AvoidClockOverlap,
                 TiledClockCorner = ClockCorner,
@@ -142,7 +146,7 @@ namespace SimpleImageSlideShow.Components.Pages
             var directoryPath = activeProfile.Settings.DirectoryPath;
             if (string.IsNullOrWhiteSpace(directoryPath) || !Directory.Exists(directoryPath)) return;
 
-            ImageService.LoadImages(directoryPath);
+            SetImageStock(ImageService.LoadImages(directoryPath));
             WebViewHost.MapImagesFolder(directoryPath);
         }
 
@@ -248,6 +252,22 @@ namespace SimpleImageSlideShow.Components.Pages
             }
         }
 
+        private void OnDefragTargetCountInput(ChangeEventArgs e)
+        {
+            if (e.Value is string s && uint.TryParse(s, out var v))
+            {
+                DefragTargetCount = Math.Min(12u, v);
+            }
+        }
+
+        private void OnDefragTriesInput(ChangeEventArgs e)
+        {
+            if (e.Value is string s && uint.TryParse(s, out var v))
+            {
+                DefragTries = Math.Min(200u, v);
+            }
+        }
+
         private async Task SaveAndApplyAsync()
         {
             await SaveCurrentProfileAsync();
@@ -263,7 +283,7 @@ namespace SimpleImageSlideShow.Components.Pages
             await StopAsync();
 
             DirectoryPath = directoryPath;
-            ImageService.LoadImages(directoryPath);
+            SetImageStock(ImageService.LoadImages(directoryPath));
             WebViewHost.MapImagesFolder(directoryPath);
             await SaveCurrentProfileAsync();
 

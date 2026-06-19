@@ -74,11 +74,7 @@ namespace SimpleImageSlideShow.Components.Pages
         private async Task<TiledItem?> StepAsync()
         {
             if (Occupied is null) return null;
-            var added = await AddOneAsync();
-            if (added is null)
-            {
-                added = await AddWithFifoRemovalAsync();
-            }
+            var added = await AddWithFifoRemovalAsync();
             try { await EnsurePlanAsync(); } catch { }
             return added;
         }
@@ -121,10 +117,16 @@ namespace SimpleImageSlideShow.Components.Pages
             for (int t = 0; t < imageTries; t++)
             {
                 var imagePath = await GetRandomUnusedPathAsync();
+                if (string.IsNullOrWhiteSpace(imagePath))
+                {
+                    imagePath = TakeRandomImageFromStock(allowUsedPaths: true);
+                }
                 if (string.IsNullOrWhiteSpace(imagePath)) return null;
                 var size = await ImageService.GetImageSizeAsync(imagePath);
                 if (size is null) continue;
                 var (origW, origH) = size.Value;
+                var onScreenIndex = Items.FindIndex(item => string.Equals(item.Path, imagePath, StringComparison.OrdinalIgnoreCase));
+                var isAlreadyOnScreen = onScreenIndex >= 0;
 
                 // 長辺比ベースの初期候補（アップスケール禁止）
                 var hi = Math.Max(MinScale, Math.Min(1.0, MaxScale));
@@ -144,7 +146,7 @@ namespace SimpleImageSlideShow.Components.Pages
                 // try without removal first (avoid clock area) with multiple random scales
                 // attempt initial chosen scale first
                 var avoidClock = ShowClock && AvoidClockOverlap;
-                if (TryPlace(reqRows, reqCols, out var r0, out var c0, avoidClock: avoidClock))
+                if (!isAlreadyOnScreen && TryPlace(reqRows, reqCols, out var r0, out var c0, avoidClock: avoidClock))
                 {
                     var src0 = BuildVirtualHostUrl(imagePath);
                     var item0 = CreateTiledItem(imagePath, r0, c0, reqRows, reqCols, rand, sw, sh, src0);
@@ -156,31 +158,43 @@ namespace SimpleImageSlideShow.Components.Pages
                     return item0;
                 }
 
-                // then try a few random scales
-                for (int tries = 0; tries < RandomScaleTries; tries++)
+                if (!isAlreadyOnScreen && TryComputeRandomDefragForPlacement(reqRows, reqCols, out var defragRow, out var defragCol, out var moves, avoidClock: avoidClock))
                 {
-                    var rtry = lo < hi ? lo + Random.Shared.NextDouble() * (hi - lo) : lo;
-                    var (swD, shD) = ComputeViewportLongEdgeTargetNoUpscale(origW, origH, rtry, clampToGrid: true);
-                    int reqColsD = Math.Max(1, (int)Math.Ceiling(swD / TileW));
-                    int reqRowsD = Math.Max(1, (int)Math.Ceiling(shD / TileH));
-                    if (reqColsD <= Cols && reqRowsD <= Rows && TryPlace(reqRowsD, reqColsD, out var rD, out var cD, avoidClock: avoidClock))
+                    var srcDefrag = BuildVirtualHostUrl(imagePath);
+                    var itemDefrag = CreateTiledItem(imagePath, defragRow, defragCol, reqRows, reqCols, rand, sw, sh, srcDefrag);
+                    ApplyDefragPlacement(itemDefrag, moves);
+                    return itemDefrag;
+                }
+
+                // then try a few random scales
+                if (!isAlreadyOnScreen)
+                {
+                    for (int tries = 0; tries < RandomScaleTries; tries++)
                     {
-                        var srcD = BuildVirtualHostUrl(imagePath);
-                        var itemD = CreateTiledItem(imagePath, rD, cD, reqRowsD, reqColsD, rtry, swD, shD, srcD);
-                        FillCells(itemD.Row, itemD.Col, itemD.RowSpan, itemD.ColSpan, true);
-                        SetOwners(itemD, true);
-                        Items.Add(itemD);
-                        UsedPaths.Add(imagePath);
-                        AddCooldown(imagePath);
-                        return itemD;
+                        var rtry = lo < hi ? lo + Random.Shared.NextDouble() * (hi - lo) : lo;
+                        var (swD, shD) = ComputeViewportLongEdgeTargetNoUpscale(origW, origH, rtry, clampToGrid: true);
+                        int reqColsD = Math.Max(1, (int)Math.Ceiling(swD / TileW));
+                        int reqRowsD = Math.Max(1, (int)Math.Ceiling(shD / TileH));
+                        if (reqColsD <= Cols && reqRowsD <= Rows && TryPlace(reqRowsD, reqColsD, out var rD, out var cD, avoidClock: avoidClock))
+                        {
+                            var srcD = BuildVirtualHostUrl(imagePath);
+                            var itemD = CreateTiledItem(imagePath, rD, cD, reqRowsD, reqColsD, rtry, swD, shD, srcD);
+                            FillCells(itemD.Row, itemD.Col, itemD.RowSpan, itemD.ColSpan, true);
+                            SetOwners(itemD, true);
+                            Items.Add(itemD);
+                            UsedPaths.Add(imagePath);
+                            AddCooldown(imagePath);
+                            return itemD;
+                        }
                     }
                 }
 
                 // simulate FIFO removals on a copy of the occupancy grid to find minimal removals (avoid clock area)
-                if (!TryComputeFifoRemovalForPlacement(reqRows, reqCols, out int removeCount, out int rr, out int cc, avoidClock: avoidClock))
+                var minRemoveCount = isAlreadyOnScreen ? onScreenIndex + 1 : 0;
+                if (!TryComputeFifoRemovalForPlacement(reqRows, reqCols, out int removeCount, out int rr, out int cc, avoidClock: avoidClock, minRemoveCount: minRemoveCount))
                 {
                     // try again allowing clock area as last resort
-                    if (!TryComputeFifoRemovalForPlacement(reqRows, reqCols, out removeCount, out rr, out cc, avoidClock: false))
+                    if (!TryComputeFifoRemovalForPlacement(reqRows, reqCols, out removeCount, out rr, out cc, avoidClock: false, minRemoveCount: minRemoveCount))
                     {
                         // couldn't compute (should be rare), try another image
                         continue;
@@ -229,16 +243,16 @@ namespace SimpleImageSlideShow.Components.Pages
             var now = DateTime.UtcNow;
             for (int i = 0; i < tries; i++)
             {
-                var p = ImageService.GetRandomImagePath();
+                var p = TakeRandomImageFromStock();
                 if (string.IsNullOrWhiteSpace(p)) return string.Empty;
                 if (UsedPaths.Contains(p)) { await Task.Yield(); continue; }
                 if (_cooldown.TryGetValue(p, out var until) && until > now) { await Task.Yield(); continue; }
                 return p;
             }
-            // Fallback: ignore TTL but avoid duplicates on screen
+            // Fallback: ignore TTL but keep the cycle and on-screen duplicate constraints.
             for (int i = 0; i < tries; i++)
             {
-                var p = ImageService.GetRandomImagePath();
+                var p = TakeRandomImageFromStock();
                 if (string.IsNullOrWhiteSpace(p)) return string.Empty;
                 if (!UsedPaths.Contains(p)) return p;
                 await Task.Yield();
@@ -290,12 +304,57 @@ namespace SimpleImageSlideShow.Components.Pages
             UsedPaths.Clear();
             _planQueue.Clear();
             _lastTickItem = null;
+            ResetUnusedImageStock();
 
             _cooldown.Clear();
             while (_cooldownQueue.TryDequeue(out _, out _)) { }
 
             Occupied = null;
             Owners = null;
+        }
+
+        private void SetImageStock(IEnumerable<string> imagePaths)
+        {
+            ImageStock = imagePaths
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            ResetUnusedImageStock();
+        }
+
+        private void ResetUnusedImageStock()
+        {
+            UnusedImageStock.Clear();
+            UnusedImageStock.AddRange(ImageStock);
+        }
+
+        private string TakeRandomImageFromStock(ISet<string>? additionallyUsed = null, bool allowUsedPaths = false)
+        {
+            if (ImageStock.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            if (UnusedImageStock.Count == 0)
+            {
+                ResetUnusedImageStock();
+            }
+
+            while (UnusedImageStock.Count > 0)
+            {
+                var index = Random.Shared.Next(UnusedImageStock.Count);
+                var path = UnusedImageStock[index];
+                UnusedImageStock.RemoveAt(index);
+
+                if ((!allowUsedPaths && UsedPaths.Contains(path)) || additionallyUsed?.Contains(path) == true)
+                {
+                    continue;
+                }
+
+                return path;
+            }
+
+            return string.Empty;
         }
 
         private async Task WaitForNextTickAsync(TiledItem? lastItem, CancellationToken token)

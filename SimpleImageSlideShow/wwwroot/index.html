@@ -50,9 +50,19 @@
         }
 
         function h(e){
-          if(e.defaultPrevented || e.repeat || e.code !== 'Space' || isEditableTarget(e.target)) return;
-          e.preventDefault();
-          dotnetRef.invokeMethodAsync('SkipCurrentDelayAsync').catch(function(){});
+          if(e.defaultPrevented || isEditableTarget(e.target)) return;
+
+          if(!e.repeat && e.code === 'Space'){
+            e.preventDefault();
+            dotnetRef.invokeMethodAsync('SkipCurrentDelayAsync').catch(function(){});
+            return;
+          }
+
+          if(e.code === 'ArrowUp' || e.key === '+' || e.code === 'NumpadAdd'){
+            e.preventDefault();
+            dotnetRef.invokeMethodAsync('GrowLatestImageAsync').catch(function(){});
+            return;
+          }
         }
 
         document.addEventListener('keydown', h);

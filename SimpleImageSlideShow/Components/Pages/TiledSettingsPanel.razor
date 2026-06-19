@@ -81,6 +81,14 @@
                 <label class="form-label">Scale calculate retry: @RandomScaleTries</label>
                 <input type="range" min="1" max="500" value="@RandomScaleTries" @oninput="RandomScaleTriesInput" />
             </div>
+            <div>
+                <label class="form-label">Defrag target count: @DefragTargetCount</label>
+                <input type="range" min="0" max="12" value="@DefragTargetCount" @oninput="DefragTargetCountInput" />
+            </div>
+            <div>
+                <label class="form-label">Defrag retry: @DefragTries</label>
+                <input type="range" min="0" max="200" value="@DefragTries" @oninput="DefragTriesInput" />
+            </div>
             <div class="buttons">
                 <button class="btn btn-sm btn-outline-secondary" title="Toggle fullscreen" disabled="@IsWindowModeChanging" @onclick="ToggleWindowMode">
                     @(IsFullScreen ? "Windowed View" : "Full Screen")
@@ -115,6 +123,8 @@
     [Parameter] public double MaxScale { get; set; }
     [Parameter] public int MinTilePx { get; set; }
     [Parameter] public uint RandomScaleTries { get; set; }
+    [Parameter] public uint DefragTargetCount { get; set; }
+    [Parameter] public uint DefragTries { get; set; }
     [Parameter] public bool IsFullScreen { get; set; }
     [Parameter] public bool IsWindowModeChanging { get; set; }
 
@@ -130,6 +140,8 @@
     [Parameter] public EventCallback<ChangeEventArgs> MaxScaleInput { get; set; }
     [Parameter] public EventCallback<ChangeEventArgs> MinTileInput { get; set; }
     [Parameter] public EventCallback<ChangeEventArgs> RandomScaleTriesInput { get; set; }
+    [Parameter] public EventCallback<ChangeEventArgs> DefragTargetCountInput { get; set; }
+    [Parameter] public EventCallback<ChangeEventArgs> DefragTriesInput { get; set; }
     [Parameter] public EventCallback<ChangeEventArgs> ActiveProfileChanged { get; set; }
     [Parameter] public EventCallback<ChangeEventArgs> ProfileNameInput { get; set; }
     [Parameter] public EventCallback CreateProfile { get; set; }

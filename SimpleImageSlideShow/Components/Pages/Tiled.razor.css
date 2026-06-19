@@ -30,7 +30,8 @@
     align-items: center;
     justify-content: center;
     opacity: 0;
-    will-change: opacity;
+    will-change: left, top, width, height, opacity;
+    transition: left 320ms ease, top 320ms ease, width 320ms ease, height 320ms ease;
     animation: fadeIn 300ms ease-out forwards;
 }
 
