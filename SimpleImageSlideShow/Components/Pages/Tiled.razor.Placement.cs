@@ -12,38 +12,271 @@ namespace SimpleImageSlideShow.Components.Pages
             return total == 0 ? 0 : (100.0 * used / total);
         }
 
-        private bool TryComputeFifoRemovalForPlacement(int reqRows, int reqCols, out int removeCount, out int row, out int col, bool avoidClock, int minRemoveCount = 0)
+        private bool TryComputeFifoRemovalForPlacement(
+            int reqRows,
+            int reqCols,
+            out int removeCount,
+            out int row,
+            out int col,
+            bool avoidClock,
+            int minRemoveCount = 0,
+            int plannedRemoveCount = 0,
+            int plannedRow = -1,
+            int plannedCol = -1)
         {
             removeCount = 0; row = col = -1;
             if (Occupied is null) return false;
-
-            // copy occupancy
-            var occSim = new bool[Rows, Cols];
-            for (int r = 0; r < Rows; r++)
-                for (int c = 0; c < Cols; c++)
-                    occSim[r, c] = Occupied[r, c];
-
-            // quick success without removals
-            if (minRemoveCount == 0 && TryPlaceSim(reqRows, reqCols, occSim, out row, out col, avoidClock))
+            var gridItems = Items
+                .Select(item => new TiledGridItem(item.Row, item.Col, item.RowSpan, item.ColSpan))
+                .ToArray();
+            if (!TiledPlacementPlanner.TryRecalculateFifoPlacement(
+                    Occupied,
+                    gridItems,
+                    new TiledPlannedGridPlacement(
+                        plannedRemoveCount,
+                        reqRows,
+                        reqCols,
+                        plannedRow,
+                        plannedCol),
+                    avoidClock ? ClockCells : null,
+                    minRemoveCount,
+                    count => Random.Shared.Next(count),
+                    out var placement))
             {
-                removeCount = 0;
-                return true;
+                return false;
             }
 
-            // progressively clear oldest tiles and test
-            for (int k = 1; k <= Items.Count; k++)
+            removeCount = placement.RemoveCount;
+            row = placement.Row;
+            col = placement.Col;
+            return true;
+        }
+
+        private bool TryRecalculatePlacementPlan(PlannedStep originalPlan, out PlannedStep recalculatedPlan)
+        {
+            recalculatedPlan = originalPlan;
+            if (Occupied is null || TileW <= 0 || TileH <= 0) return false;
+
+            var variants = BuildCurrentPlacementVariants(originalPlan);
+            if (variants.Count == 0) return false;
+
+            var onScreenIndex = Items.FindIndex(item =>
+                string.Equals(item.Path, originalPlan.Path, StringComparison.OrdinalIgnoreCase));
+            var minimumRemoveCount = onScreenIndex >= 0 ? onScreenIndex + 1 : 0;
+            var avoidClock = ShowClock && AvoidClockOverlap;
+
+            if (minimumRemoveCount == 0)
             {
-                var it = Items[k - 1];
-                FillCellsSim(it.Row, it.Col, it.RowSpan, it.ColSpan, occSim, false);
-                if (k >= minRemoveCount && TryPlaceSim(reqRows, reqCols, occSim, out row, out col, avoidClock))
+                var preferredVariant = variants[0];
+                if (originalPlan.RemoveCount == 0 && originalPlan.Moves.Count > 0 &&
+                    TiledPlacementPlanner.IsDefragPlacementValid(
+                        Occupied,
+                        Items.Select(item => new TiledDefragItem(
+                            item.Path,
+                            item.Row,
+                            item.Col,
+                            item.RowSpan,
+                            item.ColSpan)).ToArray(),
+                        originalPlan.Row,
+                        originalPlan.Col,
+                        preferredVariant.RowSpan,
+                        preferredVariant.ColSpan,
+                        originalPlan.Moves.Select(move => new TiledDefragMove(
+                            move.Path,
+                            move.Row,
+                            move.Col)).ToArray(),
+                        avoidClock ? ClockCells : null))
                 {
-                    removeCount = k;
+                    recalculatedPlan = WithPlacement(
+                        originalPlan,
+                        preferredVariant,
+                        originalPlan.Row,
+                        originalPlan.Col,
+                        removeCount: 0,
+                        moves: originalPlan.Moves);
                     return true;
+                }
+
+                if (originalPlan.RemoveCount == 0 && originalPlan.Moves.Count == 0 &&
+                    CanPlace(
+                        originalPlan.Row,
+                        originalPlan.Col,
+                        preferredVariant.RowSpan,
+                        preferredVariant.ColSpan,
+                        avoidClock))
+                {
+                    recalculatedPlan = WithPlacement(
+                        originalPlan,
+                        preferredVariant,
+                        originalPlan.Row,
+                        originalPlan.Col,
+                        removeCount: 0,
+                        moves: []);
+                    return true;
+                }
+
+                foreach (var variant in variants)
+                {
+                    if (TryPlace(variant.RowSpan, variant.ColSpan, out var row, out var col, avoidClock))
+                    {
+                        recalculatedPlan = WithPlacement(originalPlan, variant, row, col, removeCount: 0, moves: []);
+                        return true;
+                    }
+                }
+
+                foreach (var variant in variants)
+                {
+                    if (TryComputeRandomDefragForPlacement(
+                            variant.RowSpan,
+                            variant.ColSpan,
+                            out var row,
+                            out var col,
+                            out var moves,
+                            avoidClock))
+                    {
+                        recalculatedPlan = WithPlacement(originalPlan, variant, row, col, removeCount: 0, moves);
+                        return true;
+                    }
                 }
             }
 
-            return false;
+            if (TrySelectBestFifoPlacement(
+                    originalPlan,
+                    variants,
+                    avoidClock,
+                    minimumRemoveCount,
+                    out recalculatedPlan))
+            {
+                return true;
+            }
+
+            return avoidClock && TrySelectBestFifoPlacement(
+                originalPlan,
+                variants,
+                avoidClock: false,
+                minimumRemoveCount,
+                out recalculatedPlan);
         }
+
+        private List<PlacementVariant> BuildCurrentPlacementVariants(PlannedStep plan)
+        {
+            var variants = new List<PlacementVariant>(2);
+            var range = GetCurrentScaleRange(plan.OrigWidth, plan.OrigHeight);
+            var scaleCandidates = TiledPlacementPlanner.CreateScaleCandidates(
+                range.Min,
+                range.Max,
+                plan.Scale,
+                randomTryCount: 0,
+                nextDouble: static () => 0);
+            foreach (var scale in scaleCandidates)
+            {
+                AddVariant(scale);
+            }
+            return variants;
+
+            void AddVariant(double scale)
+            {
+                var (width, height) = ComputeViewportLongEdgeTargetNoUpscale(
+                    plan.OrigWidth,
+                    plan.OrigHeight,
+                    scale,
+                    clampToGrid: true);
+                var colSpan = Math.Max(1, (int)Math.Ceiling(width / TileW));
+                var rowSpan = Math.Max(1, (int)Math.Ceiling(height / TileH));
+                if (colSpan > Cols || rowSpan > Rows) return;
+                if (variants.Any(variant => variant.RowSpan == rowSpan && variant.ColSpan == colSpan)) return;
+                variants.Add(new PlacementVariant(scale, width, height, rowSpan, colSpan));
+            }
+        }
+
+        private TiledScaleRange GetCurrentScaleRange(double origWidth, double origHeight)
+            => TiledPlacementPlanner.CalculateScaleRange(
+                MinScale,
+                MaxScale,
+                ViewportW,
+                ViewportH,
+                origWidth,
+                origHeight,
+                ShrinkGuardThreshold);
+
+        private bool TrySelectBestFifoPlacement(
+            PlannedStep originalPlan,
+            IReadOnlyList<PlacementVariant> variants,
+            bool avoidClock,
+            int minimumRemoveCount,
+            out PlannedStep selectedPlan)
+        {
+            selectedPlan = originalPlan;
+            PlacementVariant? selectedVariant = null;
+            var selectedRemoveCount = int.MaxValue;
+            var selectedRow = -1;
+            var selectedCol = -1;
+
+            foreach (var variant in variants)
+            {
+                if (!TryComputeFifoRemovalForPlacement(
+                        variant.RowSpan,
+                        variant.ColSpan,
+                        out var removeCount,
+                        out var row,
+                        out var col,
+                        avoidClock,
+                        minimumRemoveCount,
+                        originalPlan.RemoveCount,
+                        originalPlan.Row,
+                        originalPlan.Col))
+                {
+                    continue;
+                }
+
+                if (removeCount < selectedRemoveCount ||
+                    (removeCount == selectedRemoveCount &&
+                     (selectedVariant is null || variant.Scale > selectedVariant.Value.Scale)))
+                {
+                    selectedVariant = variant;
+                    selectedRemoveCount = removeCount;
+                    selectedRow = row;
+                    selectedCol = col;
+                }
+            }
+
+            if (selectedVariant is null) return false;
+            selectedPlan = WithPlacement(
+                originalPlan,
+                selectedVariant.Value,
+                selectedRow,
+                selectedCol,
+                selectedRemoveCount,
+                moves: []);
+            return true;
+        }
+
+        private static PlannedStep WithPlacement(
+            PlannedStep plan,
+            PlacementVariant variant,
+            int row,
+            int col,
+            int removeCount,
+            IReadOnlyList<PlannedMove> moves)
+            => plan with
+            {
+                Row = row,
+                Col = col,
+                RowSpan = variant.RowSpan,
+                ColSpan = variant.ColSpan,
+                Scale = variant.Scale,
+                ImgWidth = variant.ImgWidth,
+                ImgHeight = variant.ImgHeight,
+                RemoveCount = removeCount,
+                Moves = moves
+            };
+
+        private readonly record struct PlacementVariant(
+            double Scale,
+            double ImgWidth,
+            double ImgHeight,
+            int RowSpan,
+            int ColSpan);
 
         private bool TryComputeRandomDefragForPlacement(int reqRows, int reqCols, out int row, out int col, out IReadOnlyList<PlannedMove> moves, bool avoidClock)
         {
@@ -271,8 +504,13 @@ namespace SimpleImageSlideShow.Components.Pages
         {
             var moveItems = moves
                 .Select(move => (Move: move, Item: Items.FirstOrDefault(item => string.Equals(item.Path, move.Path, StringComparison.OrdinalIgnoreCase))))
-                .Where(entry => entry.Item is not null)
                 .ToList();
+
+            if (moveItems.Any(entry => entry.Item is null) ||
+                moveItems.Select(entry => entry.Move.Path).Distinct(StringComparer.OrdinalIgnoreCase).Count() != moves.Count)
+            {
+                throw new InvalidOperationException("The defragmentation plan no longer matches the current tiled items.");
+            }
 
             foreach (var (_, item) in moveItems)
             {
@@ -303,7 +541,8 @@ namespace SimpleImageSlideShow.Components.Pages
         private bool TryPlaceAreaBasedNoUpscale(double origW, double origH, string filePath, double lo, double hi, double initialRatio, out TiledItem item, bool avoidClock)
         {
             item = default!;
-            for (int attempt = 0; attempt < RandomScaleTries; attempt++)
+            var boundedTryCount = Math.Min(RandomScaleTries, Models.AppSettings.RandomScaleTriesLimit);
+            for (var attempt = 0u; attempt < boundedTryCount; attempt++)
             {
                 var ratio = attempt == 0 ? initialRatio : (lo < hi ? lo + Random.Shared.NextDouble() * (hi - lo) : lo);
                 ratio = Math.Clamp(ratio, lo, hi);
@@ -334,7 +573,8 @@ namespace SimpleImageSlideShow.Components.Pages
         private bool TryPlaceLongEdgeBasedNoUpscale(double origW, double origH, string filePath, double lo, double hi, double initialRatio, out TiledItem item, bool avoidClock)
         {
             item = default!;
-            for (int attempt = 0; attempt < RandomScaleTries; attempt++)
+            var boundedTryCount = Math.Min(RandomScaleTries, Models.AppSettings.RandomScaleTriesLimit);
+            for (var attempt = 0u; attempt < boundedTryCount; attempt++)
             {
                 var ratio = attempt == 0 ? initialRatio : (lo < hi ? lo + Random.Shared.NextDouble() * (hi - lo) : lo);
                 ratio = Math.Clamp(ratio, lo, hi);

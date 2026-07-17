@@ -1,0 +1,7 @@
+schemaVersion: 1
+id: src.tiled_placement
+kind: source
+links:
+  - rel: realized-by
+    to: id:src.tiled_placement_planner
+    pathHint: SimpleImageSlideShow/Components/Pages/TiledPlacementPlanner.cs

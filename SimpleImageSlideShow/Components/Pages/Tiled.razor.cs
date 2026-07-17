@@ -147,6 +147,8 @@ namespace SimpleImageSlideShow.Components.Pages
             public required int RowSpan { get; init; }
             public required int ColSpan { get; init; }
             public required double Scale { get; init; }
+            public required double OrigWidth { get; init; }
+            public required double OrigHeight { get; init; }
             public required double ImgWidth { get; init; }
             public required double ImgHeight { get; init; }
             public required string Src { get; init; }
@@ -157,6 +159,7 @@ namespace SimpleImageSlideShow.Components.Pages
         private record PlannedMove(string Path, int Row, int Col);
 
         private readonly List<PlannedStep> _planQueue = new();
+        private readonly TiledPlanCoordinator _planCoordinator = new();
         private TiledItem? _lastTickItem;
 
         // Reuse TTL: avoid reusing the same image too soon

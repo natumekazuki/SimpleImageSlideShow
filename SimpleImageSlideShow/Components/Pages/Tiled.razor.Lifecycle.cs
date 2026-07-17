@@ -83,6 +83,7 @@ namespace SimpleImageSlideShow.Components.Pages
             try { _clockTimer?.Dispose(); } catch { }
             CancelClockLayoutUpdate();
             WindowService.ModeChanged -= OnWindowModeChanged;
+            await _planCoordinator.DisposeAsync();
             ImageService.Dispose();
         }
 

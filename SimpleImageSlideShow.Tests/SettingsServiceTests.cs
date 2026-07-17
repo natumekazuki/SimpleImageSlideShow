@@ -107,6 +107,21 @@ public sealed class SettingsServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task SaveAsync_ClampsRandomScaleTriesToResourceLimit()
+    {
+        var service = new SettingsService(settingsDirectory);
+
+        await service.SaveAsync(new AppSettings
+        {
+            RandomScaleTries = uint.MaxValue
+        });
+
+        var loaded = await service.LoadAsync();
+
+        Assert.Equal(AppSettings.RandomScaleTriesLimit, loaded.RandomScaleTries);
+    }
+
+    [Fact]
     public async Task SaveAsync_CreatesExpectedSchemaVersion()
     {
         var service = new SettingsService(settingsDirectory);

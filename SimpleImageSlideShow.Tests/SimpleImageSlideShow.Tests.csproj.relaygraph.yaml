@@ -10,3 +10,9 @@ links:
   - rel: realized-by
     to: id:tests.delay_range
     pathHint: SimpleImageSlideShow.Tests/DelayRangeTests.cs
+  - rel: realized-by
+    to: id:tests.tiled_placement_planner
+    pathHint: SimpleImageSlideShow.Tests/TiledPlacementPlannerTests.cs
+  - rel: realized-by
+    to: id:tests.tiled_plan_coordinator
+    pathHint: SimpleImageSlideShow.Tests/TiledPlanCoordinatorTests.cs
