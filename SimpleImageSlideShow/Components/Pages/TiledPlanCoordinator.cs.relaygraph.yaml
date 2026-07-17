@@ -1,0 +1,7 @@
+schemaVersion: 1
+id: src.tiled_plan_coordinator
+kind: source
+links:
+  - rel: verified-by
+    to: id:tests.tiled_plan_coordinator
+    pathHint: SimpleImageSlideShow.Tests/TiledPlanCoordinatorTests.cs

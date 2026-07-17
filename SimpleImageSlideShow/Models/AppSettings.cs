@@ -2,6 +2,8 @@ namespace SimpleImageSlideShow.Models
 {
     public sealed class AppSettings
     {
+        public const uint RandomScaleTriesLimit = 500;
+
         public uint MinDelaySeconds { get; set; } = 5;
         public uint MaxDelaySeconds { get; set; } = 5;
         public string? DirectoryPath { get; set; }

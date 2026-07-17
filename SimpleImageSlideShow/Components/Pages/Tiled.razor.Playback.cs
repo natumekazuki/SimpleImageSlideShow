@@ -41,7 +41,9 @@ namespace SimpleImageSlideShow.Components.Pages
                 {
                     await InvokeAsync(async () =>
                     {
-                        var item = await ApplyPlannedOrStepAsync();
+                        token.ThrowIfCancellationRequested();
+                        var item = await ApplyPlannedOrStepAsync(token);
+                        token.ThrowIfCancellationRequested();
                         StateHasChanged();
                         newItem = item;
                     });
@@ -49,6 +51,7 @@ namespace SimpleImageSlideShow.Components.Pages
                 catch (OperationCanceledException) { break; }
                 catch { }
 
+                if (token.IsCancellationRequested) break;
                 _lastTickItem = newItem ?? Items.LastOrDefault();
             }
         }
@@ -72,12 +75,7 @@ namespace SimpleImageSlideShow.Components.Pages
         }
 
         private async Task<TiledItem?> StepAsync()
-        {
-            if (Occupied is null) return null;
-            var added = await AddWithFifoRemovalAsync();
-            try { await EnsurePlanAsync(); } catch { }
-            return added;
-        }
+            => Occupied is null ? null : await ApplyPlannedOrStepAsync();
 
         private async Task<TiledItem?> AddOneAsync()
         {
@@ -88,13 +86,7 @@ namespace SimpleImageSlideShow.Components.Pages
             var (origW, origH) = size.Value;
 
             // 画面長辺比ベースでサイズを決定（アップスケール禁止）。
-            var hi = Math.Max(MinScale, Math.Min(1.0, MaxScale));
-            var lo = Math.Min(MinScale, hi);
-            var vLong = Math.Max(Math.Max(1.0, ViewportW), Math.Max(1.0, ViewportH));
-            var iLong = Math.Max(origW, origH);
-            var rImg = vLong > 0 ? (iLong / vLong) : MinScale; // 原寸の長辺が画面長辺に占める比率
-            // B: 小さい画像は原寸未満にしない → rImg が範囲内なら下限を rImg まで引き上げ
-            if (rImg <= ShrinkGuardThreshold) lo = Math.Max(lo, rImg);
+            var (lo, hi) = GetCurrentScaleRange(origW, origH);
             var rand = lo < hi ? lo + Random.Shared.NextDouble() * (hi - lo) : lo;
             if (!TryPlaceLongEdgeBasedNoUpscale(origW, origH, imagePath, lo, hi, rand, out var item, avoidClock: ShowClock && AvoidClockOverlap))
             {
@@ -110,38 +102,32 @@ namespace SimpleImageSlideShow.Components.Pages
         }
 
         // Insert at initially chosen scale, removing oldest tiles (FIFO) until placement is possible.
-        private async Task<TiledItem?> AddWithFifoRemovalAsync()
+        private async Task<TiledItem?> AddWithFifoRemovalAsync(CancellationToken cancellationToken)
         {
             // pick a candidate image
             const int imageTries = 40;
             for (int t = 0; t < imageTries; t++)
             {
-                var imagePath = await GetRandomUnusedPathAsync();
+                cancellationToken.ThrowIfCancellationRequested();
+                var imagePath = await GetRandomUnusedPathAsync(cancellationToken);
                 if (string.IsNullOrWhiteSpace(imagePath))
                 {
                     imagePath = TakeRandomImageFromStock(allowUsedPaths: true);
                 }
                 if (string.IsNullOrWhiteSpace(imagePath)) return null;
                 var size = await ImageService.GetImageSizeAsync(imagePath);
+                cancellationToken.ThrowIfCancellationRequested();
                 if (size is null) continue;
                 var (origW, origH) = size.Value;
                 var onScreenIndex = Items.FindIndex(item => string.Equals(item.Path, imagePath, StringComparison.OrdinalIgnoreCase));
                 var isAlreadyOnScreen = onScreenIndex >= 0;
 
                 // 長辺比ベースの初期候補（アップスケール禁止）
-                var hi = Math.Max(MinScale, Math.Min(1.0, MaxScale));
-                var lo = Math.Min(MinScale, hi);
-                var vLong = Math.Max(Math.Max(1.0, ViewportW), Math.Max(1.0, ViewportH));
-                var iLong = Math.Max(origW, origH);
-                var rImg = vLong > 0 ? (iLong / vLong) : MinScale;
-                if (rImg <= ShrinkGuardThreshold) lo = Math.Max(lo, rImg);
+                var (lo, hi) = GetCurrentScaleRange(origW, origH);
                 var rand = lo < hi ? lo + Random.Shared.NextDouble() * (hi - lo) : lo;
                 var (sw, sh) = ComputeViewportLongEdgeTargetNoUpscale(origW, origH, rand, clampToGrid: true);
                 int reqCols = Math.Max(1, (int)Math.Ceiling(sw / TileW));
                 int reqRows = Math.Max(1, (int)Math.Ceiling(sh / TileH));
-
-                // if cannot fit even on an empty grid, skip this image
-                if (reqCols > Cols || reqRows > Rows) continue;
 
                 // try without removal first (avoid clock area) with multiple random scales
                 // attempt initial chosen scale first
@@ -169,9 +155,14 @@ namespace SimpleImageSlideShow.Components.Pages
                 // then try a few random scales
                 if (!isAlreadyOnScreen)
                 {
-                    for (int tries = 0; tries < RandomScaleTries; tries++)
+                    var scaleCandidates = TiledPlacementPlanner.CreateScaleCandidates(
+                        lo,
+                        hi,
+                        rand,
+                        RandomScaleTries,
+                        Random.Shared.NextDouble);
+                    foreach (var rtry in scaleCandidates.Skip(1))
                     {
-                        var rtry = lo < hi ? lo + Random.Shared.NextDouble() * (hi - lo) : lo;
                         var (swD, shD) = ComputeViewportLongEdgeTargetNoUpscale(origW, origH, rtry, clampToGrid: true);
                         int reqColsD = Math.Max(1, (int)Math.Ceiling(swD / TileW));
                         int reqRowsD = Math.Max(1, (int)Math.Ceiling(shD / TileH));
@@ -189,60 +180,35 @@ namespace SimpleImageSlideShow.Components.Pages
                     }
                 }
 
-                // simulate FIFO removals on a copy of the occupancy grid to find minimal removals (avoid clock area)
-                var minRemoveCount = isAlreadyOnScreen ? onScreenIndex + 1 : 0;
-                if (!TryComputeFifoRemovalForPlacement(reqRows, reqCols, out int removeCount, out int rr, out int cc, avoidClock: avoidClock, minRemoveCount: minRemoveCount))
+                var placementPlan = new PlannedStep
                 {
-                    // try again allowing clock area as last resort
-                    if (!TryComputeFifoRemovalForPlacement(reqRows, reqCols, out removeCount, out rr, out cc, avoidClock: false, minRemoveCount: minRemoveCount))
-                    {
-                        // couldn't compute (should be rare), try another image
-                        continue;
-                    }
-                }
-
-                // perform a single batch removal animation for the first removeCount items
-                if (removeCount > 0)
-                {
-                    int toRemove = Math.Min(removeCount, Items.Count);
-                    for (int i = 0; i < toRemove; i++)
-                    {
-                        var it = Items[i];
-                        it.Removing = true;
-                    }
-                    StateHasChanged();
-                    await Task.Delay(300);
-
-                    for (int i = 0; i < toRemove; i++)
-                    {
-                        var it = Items[0]; // always oldest
-                        FillCells(it.Row, it.Col, it.RowSpan, it.ColSpan, false);
-                        SetOwners(it, false);
-                        Items.RemoveAt(0);
-                        UsedPaths.Remove(it.Path);
-                    }
-                }
-
-                // place new item at the precomputed location
-                var src = BuildVirtualHostUrl(imagePath);
-                var item = CreateTiledItem(imagePath, rr, cc, reqRows, reqCols, rand, sw, sh, src);
-                FillCells(item.Row, item.Col, item.RowSpan, item.ColSpan, true);
-                SetOwners(item, true);
-                Items.Add(item);
-                UsedPaths.Add(imagePath);
-                AddCooldown(imagePath);
-                return item;
+                    Path = imagePath,
+                    Row = -1,
+                    Col = -1,
+                    RowSpan = reqRows,
+                    ColSpan = reqCols,
+                    Scale = rand,
+                    OrigWidth = origW,
+                    OrigHeight = origH,
+                    ImgWidth = sw,
+                    ImgHeight = sh,
+                    Src = BuildVirtualHostUrl(imagePath),
+                    RemoveCount = 0
+                };
+                var item = await ApplyPlacementPlanAsync(placementPlan, cancellationToken);
+                if (item is not null) return item;
             }
             return null;
         }
 
-        private async Task<string> GetRandomUnusedPathAsync()
+        private async Task<string> GetRandomUnusedPathAsync(CancellationToken cancellationToken = default)
         {
             int tries = GetImageTryCount();
             CleanupCooldown();
             var now = DateTime.UtcNow;
             for (int i = 0; i < tries; i++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var p = TakeRandomImageFromStock();
                 if (string.IsNullOrWhiteSpace(p)) return string.Empty;
                 if (UsedPaths.Contains(p)) { await Task.Yield(); continue; }
@@ -252,6 +218,7 @@ namespace SimpleImageSlideShow.Components.Pages
             // Fallback: ignore TTL but keep the cycle and on-screen duplicate constraints.
             for (int i = 0; i < tries; i++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var p = TakeRandomImageFromStock();
                 if (string.IsNullOrWhiteSpace(p)) return string.Empty;
                 if (!UsedPaths.Contains(p)) return p;
@@ -302,7 +269,7 @@ namespace SimpleImageSlideShow.Components.Pages
         {
             Items.Clear();
             UsedPaths.Clear();
-            _planQueue.Clear();
+            InvalidatePlan();
             _lastTickItem = null;
             ResetUnusedImageStock();
 

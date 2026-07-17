@@ -1,0 +1,10 @@
+schemaVersion: 1
+id: src.tiled_planning
+kind: source
+links:
+  - rel: realized-by
+    to: id:src.tiled_plan_coordinator
+    pathHint: SimpleImageSlideShow/Components/Pages/TiledPlanCoordinator.cs
+  - rel: realized-by
+    to: id:src.tiled_placement_planner
+    pathHint: SimpleImageSlideShow/Components/Pages/TiledPlacementPlanner.cs

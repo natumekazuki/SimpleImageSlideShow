@@ -29,7 +29,9 @@ namespace SimpleImageSlideShow.Components.Pages
             TiledCols = settings.TiledCols > 0 ? settings.TiledCols : 6;
             MinTilePx = settings.MinTilePx > 0 ? settings.MinTilePx : 128;
             ReuseTtlSeconds = settings.TiledReuseTtlSeconds > 0 ? settings.TiledReuseTtlSeconds : 120;
-            RandomScaleTries = settings.RandomScaleTries > 0 ? settings.RandomScaleTries : 10;
+            RandomScaleTries = settings.RandomScaleTries > 0
+                ? Math.Min(Models.AppSettings.RandomScaleTriesLimit, settings.RandomScaleTries)
+                : 10;
             DefragTargetCount = Math.Min(12u, settings.DefragTargetCount);
             DefragTries = Math.Min(200u, settings.DefragTries);
             ShowClock = settings.ShowTiledClock;
@@ -51,7 +53,7 @@ namespace SimpleImageSlideShow.Components.Pages
                 TiledCols = TiledCols,
                 MinTilePx = MinTilePx,
                 TiledReuseTtlSeconds = ReuseTtlSeconds,
-                RandomScaleTries = RandomScaleTries,
+                RandomScaleTries = Math.Min(Models.AppSettings.RandomScaleTriesLimit, RandomScaleTries),
                 DefragTargetCount = DefragTargetCount,
                 DefragTries = DefragTries,
                 ShowTiledClock = ShowClock,
@@ -196,6 +198,7 @@ namespace SimpleImageSlideShow.Components.Pages
             {
                 MinScale = Math.Clamp(v / 100.0, 0.1, 1.0);
                 if (MaxScale < MinScale) MaxScale = MinScale;
+                InvalidatePlan();
             }
         }
 
@@ -205,6 +208,7 @@ namespace SimpleImageSlideShow.Components.Pages
             {
                 MaxScale = Math.Clamp(v / 100.0, 0.1, 1.0);
                 if (MaxScale < MinScale) MinScale = MaxScale;
+                InvalidatePlan();
             }
         }
 
@@ -248,7 +252,8 @@ namespace SimpleImageSlideShow.Components.Pages
         {
             if (e.Value is string s && uint.TryParse(s, out var v))
             {
-                RandomScaleTries = Math.Max(1u, Math.Min(500u, v));
+                RandomScaleTries = Math.Max(1u, Math.Min(Models.AppSettings.RandomScaleTriesLimit, v));
+                InvalidatePlan();
             }
         }
 
@@ -257,6 +262,7 @@ namespace SimpleImageSlideShow.Components.Pages
             if (e.Value is string s && uint.TryParse(s, out var v))
             {
                 DefragTargetCount = Math.Min(12u, v);
+                InvalidatePlan();
             }
         }
 
@@ -265,6 +271,7 @@ namespace SimpleImageSlideShow.Components.Pages
             if (e.Value is string s && uint.TryParse(s, out var v))
             {
                 DefragTries = Math.Min(200u, v);
+                InvalidatePlan();
             }
         }
 

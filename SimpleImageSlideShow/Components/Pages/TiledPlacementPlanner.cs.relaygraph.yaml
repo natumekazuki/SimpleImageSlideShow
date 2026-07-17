@@ -1,0 +1,7 @@
+schemaVersion: 1
+id: src.tiled_placement_planner
+kind: source
+links:
+  - rel: verified-by
+    to: id:tests.tiled_placement_planner
+    pathHint: SimpleImageSlideShow.Tests/TiledPlacementPlannerTests.cs
