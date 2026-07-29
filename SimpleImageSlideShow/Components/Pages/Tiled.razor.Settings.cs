@@ -29,9 +29,7 @@ namespace SimpleImageSlideShow.Components.Pages
             TiledCols = settings.TiledCols > 0 ? settings.TiledCols : 6;
             MinTilePx = settings.MinTilePx > 0 ? settings.MinTilePx : 128;
             ReuseTtlSeconds = settings.TiledReuseTtlSeconds > 0 ? settings.TiledReuseTtlSeconds : 120;
-            RandomScaleTries = settings.RandomScaleTries > 0
-                ? Math.Min(Models.AppSettings.RandomScaleTriesLimit, settings.RandomScaleTries)
-                : 10;
+            RandomScaleTries = Math.Min(Models.AppSettings.RandomScaleTriesLimit, settings.RandomScaleTries);
             DefragTargetCount = Math.Min(12u, settings.DefragTargetCount);
             DefragTries = Math.Min(200u, settings.DefragTries);
             ShowClock = settings.ShowTiledClock;
@@ -252,7 +250,7 @@ namespace SimpleImageSlideShow.Components.Pages
         {
             if (e.Value is string s && uint.TryParse(s, out var v))
             {
-                RandomScaleTries = Math.Max(1u, Math.Min(Models.AppSettings.RandomScaleTriesLimit, v));
+                RandomScaleTries = Math.Min(Models.AppSettings.RandomScaleTriesLimit, v);
                 InvalidatePlan();
             }
         }

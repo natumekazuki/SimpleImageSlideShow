@@ -35,7 +35,7 @@ internal static class TiledPlacementPlanner
         var lower = minScale;
         var upper = maxScale >= minScale ? maxScale : minScale;
         var boundedTryCount = Math.Min(randomTryCount, AppSettings.RandomScaleTriesLimit);
-        var candidates = new List<double>((int)boundedTryCount + 2);
+        var candidates = new List<double>((int)boundedTryCount + 1);
 
         AddIfDistinct(candidates, Math.Clamp(initialScale, lower, upper));
         for (uint i = 0; i < boundedTryCount; i++)
@@ -44,13 +44,9 @@ internal static class TiledPlacementPlanner
             if (!double.IsFinite(sample)) sample = 0;
             sample = Math.Clamp(sample, 0, 1);
             var scale = lower < upper ? lower + sample * (upper - lower) : lower;
-            if (Math.Abs(scale - lower) > ScaleTolerance)
-            {
-                AddIfDistinct(candidates, scale);
-            }
+            AddIfDistinct(candidates, scale);
         }
 
-        AddIfDistinct(candidates, lower);
         return candidates;
     }
 
