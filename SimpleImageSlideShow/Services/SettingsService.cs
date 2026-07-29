@@ -563,9 +563,7 @@ namespace SimpleImageSlideShow.Services
                 TiledClockCorner = string.IsNullOrWhiteSpace(settings.TiledClockCorner) ? "BottomLeft" : settings.TiledClockCorner,
                 TiledClockScale = settings.TiledClockScale > 0 ? settings.TiledClockScale : 1.0,
                 AvoidTiledClockOverlap = settings.AvoidTiledClockOverlap,
-                RandomScaleTries = settings.RandomScaleTries > 0
-                    ? Math.Min(AppSettings.RandomScaleTriesLimit, settings.RandomScaleTries)
-                    : 10,
+                RandomScaleTries = Math.Min(AppSettings.RandomScaleTriesLimit, settings.RandomScaleTries),
                 DefragTargetCount = Math.Min(12u, settings.DefragTargetCount),
                 DefragTries = Math.Min(200u, settings.DefragTries),
                 BackgroundColor = string.IsNullOrWhiteSpace(settings.BackgroundColor) ? "#D3D3D3" : settings.BackgroundColor

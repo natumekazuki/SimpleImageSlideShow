@@ -7,17 +7,19 @@ namespace SimpleImageSlideShow.Tests;
 public sealed class TiledPlacementPlannerTests
 {
     [Fact]
-    public void CreateScaleCandidates_AlwaysIncludesMinimumScale()
+    public void CreateScaleCandidates_UsesConfiguredRetryCountWithoutImplicitMinimum()
     {
+        var samples = new Queue<double>([0.75, 0.5, 0.25]);
+
         var candidates = TiledPlacementPlanner.CreateScaleCandidates(
             minScale: 0.25,
             maxScale: 1.0,
             initialScale: 0.8,
             randomTryCount: 3,
-            nextDouble: () => 0.75);
+            nextDouble: samples.Dequeue);
 
-        Assert.Equal(0.8, candidates[0], 10);
-        Assert.Equal(0.25, candidates[^1], 10);
+        Assert.Equal([0.8, 0.8125, 0.625, 0.4375], candidates);
+        Assert.DoesNotContain(0.25, candidates);
         Assert.All(candidates, scale => Assert.InRange(scale, 0.25, 1.0));
     }
 
@@ -34,7 +36,7 @@ public sealed class TiledPlacementPlannerTests
             nextDouble: () => ++calls / 501.0);
 
         Assert.Equal((int)AppSettings.RandomScaleTriesLimit, calls);
-        Assert.InRange(candidates.Count, 2, (int)AppSettings.RandomScaleTriesLimit + 2);
+        Assert.InRange(candidates.Count, 1, (int)AppSettings.RandomScaleTriesLimit + 1);
     }
 
     [Fact]
@@ -165,7 +167,7 @@ public sealed class TiledPlacementPlannerTests
     }
 
     [Fact]
-    public void CreateScaleCandidates_ClampsStalePlannedScaleToCurrentBounds()
+    public void CreateScaleCandidates_ZeroRetriesReturnsOnlyClampedInitialScale()
     {
         var candidates = TiledPlacementPlanner.CreateScaleCandidates(
             minScale: 0.2,
@@ -174,8 +176,8 @@ public sealed class TiledPlacementPlannerTests
             randomTryCount: 0,
             nextDouble: () => 0.5);
 
+        Assert.Single(candidates);
         Assert.Equal(0.4, candidates[0], 10);
-        Assert.Equal(0.2, candidates[^1], 10);
     }
 
     [Fact]

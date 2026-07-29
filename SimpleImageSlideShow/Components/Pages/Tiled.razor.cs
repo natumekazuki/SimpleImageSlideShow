@@ -131,7 +131,7 @@ namespace SimpleImageSlideShow.Components.Pages
         private readonly object _delaySkipLock = new();
         private CancellationTokenSource? _delaySkipCts;
         private const int PlanCapacity = 5; // plan up to 5 steps ahead
-        private uint RandomScaleTries { get; set; } = 10; // random ratio attempts per placement
+        private uint RandomScaleTries { get; set; } = 10; // additional random ratio attempts after the initial placement fails
         private uint DefragTargetCount { get; set; } = 3;
         private uint DefragTries { get; set; } = 20;
         private const double ShrinkGuardThreshold = 0.25; // 原寸未満回避を適用する長辺比率の上限

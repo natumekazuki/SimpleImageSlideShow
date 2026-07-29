@@ -541,11 +541,14 @@ namespace SimpleImageSlideShow.Components.Pages
         private bool TryPlaceAreaBasedNoUpscale(double origW, double origH, string filePath, double lo, double hi, double initialRatio, out TiledItem item, bool avoidClock)
         {
             item = default!;
-            var boundedTryCount = Math.Min(RandomScaleTries, Models.AppSettings.RandomScaleTriesLimit);
-            for (var attempt = 0u; attempt < boundedTryCount; attempt++)
+            var scaleCandidates = TiledPlacementPlanner.CreateScaleCandidates(
+                lo,
+                hi,
+                initialRatio,
+                RandomScaleTries,
+                Random.Shared.NextDouble);
+            foreach (var ratio in scaleCandidates)
             {
-                var ratio = attempt == 0 ? initialRatio : (lo < hi ? lo + Random.Shared.NextDouble() * (hi - lo) : lo);
-                ratio = Math.Clamp(ratio, lo, hi);
                 var (sw, sh) = ComputeViewportAreaTargetNoUpscale(origW, origH, ratio, clampToGrid: true);
 
                 int reqCols = Math.Max(1, (int)Math.Ceiling(sw / TileW));
@@ -573,11 +576,14 @@ namespace SimpleImageSlideShow.Components.Pages
         private bool TryPlaceLongEdgeBasedNoUpscale(double origW, double origH, string filePath, double lo, double hi, double initialRatio, out TiledItem item, bool avoidClock)
         {
             item = default!;
-            var boundedTryCount = Math.Min(RandomScaleTries, Models.AppSettings.RandomScaleTriesLimit);
-            for (var attempt = 0u; attempt < boundedTryCount; attempt++)
+            var scaleCandidates = TiledPlacementPlanner.CreateScaleCandidates(
+                lo,
+                hi,
+                initialRatio,
+                RandomScaleTries,
+                Random.Shared.NextDouble);
+            foreach (var ratio in scaleCandidates)
             {
-                var ratio = attempt == 0 ? initialRatio : (lo < hi ? lo + Random.Shared.NextDouble() * (hi - lo) : lo);
-                ratio = Math.Clamp(ratio, lo, hi);
                 var (sw, sh) = ComputeViewportLongEdgeTargetNoUpscale(origW, origH, ratio, clampToGrid: true);
 
                 int reqCols = Math.Max(1, (int)Math.Ceiling(sw / TileW));

@@ -305,7 +305,6 @@ namespace SimpleImageSlideShow.Components.Pages
                     };
                 }
 
-                // Always include the minimum scale so a valid no-removal placement is not left to chance.
                 var scaleCandidates = TiledPlacementPlanner.CreateScaleCandidates(
                     lo,
                     hi,
@@ -337,11 +336,10 @@ namespace SimpleImageSlideShow.Components.Pages
                     }
                 }
 
-                if (TryComputeBestFifoPlanSim(
+                if (TryComputeFifoPlanSim(
                         imagePath,
                         origW,
                         origH,
-                        lo,
                         rand,
                         occSim,
                         simItems,
@@ -354,11 +352,10 @@ namespace SimpleImageSlideShow.Components.Pages
             return null;
         }
 
-        private bool TryComputeBestFifoPlanSim(
+        private bool TryComputeFifoPlanSim(
             string imagePath,
             double origWidth,
             double origHeight,
-            double minScale,
             double initialScale,
             bool[,] occupied,
             List<SimItem> simItems,
@@ -372,55 +369,43 @@ namespace SimpleImageSlideShow.Components.Pages
             bool TryForClockPolicy(bool avoidClock, out PlannedStep selected)
             {
                 selected = default!;
-                var selectedRemoveCount = int.MaxValue;
-                foreach (var scale in new[] { initialScale, minScale }.Distinct())
+                var (width, height) = ComputeViewportLongEdgeTargetNoUpscale(
+                    origWidth,
+                    origHeight,
+                    initialScale,
+                    clampToGrid: true);
+                var colSpan = Math.Max(1, (int)Math.Ceiling(width / TileW));
+                var rowSpan = Math.Max(1, (int)Math.Ceiling(height / TileH));
+                if (colSpan > Cols || rowSpan > Rows ||
+                    !TryComputeFifoRemovalForPlacementSim(
+                        rowSpan,
+                        colSpan,
+                        occupied,
+                        simItems,
+                        out var removeCount,
+                        out var row,
+                        out var col,
+                        avoidClock))
                 {
-                    var (width, height) = ComputeViewportLongEdgeTargetNoUpscale(
-                        origWidth,
-                        origHeight,
-                        scale,
-                        clampToGrid: true);
-                    var colSpan = Math.Max(1, (int)Math.Ceiling(width / TileW));
-                    var rowSpan = Math.Max(1, (int)Math.Ceiling(height / TileH));
-                    if (colSpan > Cols || rowSpan > Rows ||
-                        !TryComputeFifoRemovalForPlacementSim(
-                            rowSpan,
-                            colSpan,
-                            occupied,
-                            simItems,
-                            out var removeCount,
-                            out var row,
-                            out var col,
-                            avoidClock))
-                    {
-                        continue;
-                    }
-
-                    if (removeCount > selectedRemoveCount ||
-                        (removeCount == selectedRemoveCount && selected is not null && scale <= selected.Scale))
-                    {
-                        continue;
-                    }
-
-                    selectedRemoveCount = removeCount;
-                    selected = new PlannedStep
-                    {
-                        Path = imagePath,
-                        Row = row,
-                        Col = col,
-                        RowSpan = rowSpan,
-                        ColSpan = colSpan,
-                        Scale = scale,
-                        OrigWidth = origWidth,
-                        OrigHeight = origHeight,
-                        ImgWidth = width,
-                        ImgHeight = height,
-                        Src = BuildVirtualHostUrl(imagePath),
-                        RemoveCount = removeCount
-                    };
+                    return false;
                 }
 
-                return selected is not null;
+                selected = new PlannedStep
+                {
+                    Path = imagePath,
+                    Row = row,
+                    Col = col,
+                    RowSpan = rowSpan,
+                    ColSpan = colSpan,
+                    Scale = initialScale,
+                    OrigWidth = origWidth,
+                    OrigHeight = origHeight,
+                    ImgWidth = width,
+                    ImgHeight = height,
+                    Src = BuildVirtualHostUrl(imagePath),
+                    RemoveCount = removeCount
+                };
+                return true;
             }
         }
 
